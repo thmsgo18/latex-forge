@@ -326,12 +326,6 @@ def _replace_renewcmd(content: str, cmd: str, value: str) -> str:
     return pat.sub(lambda m: m.group(1) + value + m.group(2), content)
 
 
-def _replace_def(content: str, cmd: str, value: str) -> str:
-    r"""\\def\cmd{OLD} → \\def\cmd{value}. Applied only to non-commented lines."""
-    pat = re.compile(r"(^\s*\\def\\" + re.escape(cmd) + r"\{)[^}]*(\})", re.MULTILINE)
-    return pat.sub(lambda m: m.group(1) + value + m.group(2), content)
-
-
 def _replace_cmd(content: str, cmd: str, value: str) -> str:
     r"""\\cmd{...} → \\cmd{value}. Applied only to non-commented lines."""
     pat = re.compile(r"(^\s*\\" + re.escape(cmd) + r"\{)[^}]*(\})", re.MULTILINE)

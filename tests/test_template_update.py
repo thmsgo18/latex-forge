@@ -1,8 +1,6 @@
 """Tests for update_templates() and list_all_templates_detailed()."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 import latex_forge.installed_templates as meta

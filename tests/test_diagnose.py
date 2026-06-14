@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from latex_forge.diagnose import format_diagnose_text, run_diagnose
 
 

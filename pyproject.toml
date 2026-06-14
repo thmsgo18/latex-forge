@@ -58,5 +58,8 @@ latex_forge = [
     "templates/**/.gitkeep",
     "styles/**/*",
     "assets/**/*",
+    "agents_templates/**/*",
+    "getting_started_templates/**/*",
+    "scripts_templates/**/*",
     ".vscode/extensions.json",
 ]

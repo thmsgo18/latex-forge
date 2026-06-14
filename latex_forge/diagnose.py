@@ -2,22 +2,20 @@
 
 Checks that the local machine has everything ``latex-forge`` needs (TeX
 distribution, latexmk, etc.) and reports the user's configuration state,
-so problems can be spotted with a single ``latex-forge doctor`` command
+so problems can be spotted with a single ``latex-forge diagnose`` command
 instead of trial-and-error compilation failures.
 """
 from __future__ import annotations
 
 import shutil
 import subprocess
-import sys
-from pathlib import Path
 
 
 # ── Individual checks ─────────────────────────────────────────────────────
 #
 # Each check below returns a small dict with at least an "ok" key. They never
 # raise: any unexpected error is swallowed and reported as a failed/unknown
-# check, so one broken probe can't crash the whole `doctor` command.
+# check, so one broken probe can't crash the whole `diagnose` command.
 
 
 def _check_latex_forge() -> dict:

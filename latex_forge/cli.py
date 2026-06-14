@@ -152,22 +152,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Initialize a git repository with an initial commit in the new project.",
     )
 
-    build_parser = subparsers.add_parser(
+    build_subparser = subparsers.add_parser(
         "build",
         help="Compile the project to PDF with latexmk.",
     )
-    build_parser.add_argument(
+    build_subparser.add_argument(
         "project",
         nargs="?",
         default=None,
         help="Project directory (default: current directory).",
     )
-    build_parser.add_argument(
+    build_subparser.add_argument(
         "--clean",
         action="store_true",
         help="Delete the build/ directory before compiling.",
     )
-    build_parser.add_argument(
+    build_subparser.add_argument(
         "--verbose",
         action="store_true",
         help="Show the full latexmk output instead of errors only.",
@@ -416,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
             profile = load_profile()
             if not profile:
                 print("No profile set.")
-                print(f"Run 'latex-forge profile set' to create one.")
+                print("Run 'latex-forge profile set' to create one.")
                 return 0
 
             print(f"Profile — {profile_path()}")
@@ -465,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
                 entries = list_all_templates_detailed()
                 print(json.dumps(entries, indent=2))
                 return 0
-            # Human-readable output (backward compatible)
+            # Human-readable output (default)
             built_in = sorted(p.name for p in templates_dir().iterdir() if p.is_dir())
             user = list_user_templates()
             width = max((len(t) for t in built_in + user), default=0)
