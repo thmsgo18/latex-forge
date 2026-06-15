@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- Generated `AGENTS.md` now includes a **writing-quality guide** for academic documents (reports, research articles, theses and any gallery template in the `report`/`research` families). It states the quality bar — start from the real source material (read the project/code/data the report documents, never invent), clear thesis, evidence over assertion, signposting, depth, right length (no padding), varied layout (lists, tables, figures, formulas — not walls of text), critical stance, register, coherence — plus a pre-finish self-review checklist, so a single "write the report" prompt yields a substantive draft rather than a skeleton. CV and blank projects are unaffected.
+- The shared `AGENTS.md` **Content guidelines** were hardened for rendering quality across all templates: nothing overflowing the margins (`Overfull \hbox`), correctly sized tables with no cell content bleeding past its row/column, diagrams verified overlap-free on the PDF (and colour encouraged for clarity), and a table of contents kept to a single page.
+
 ## [0.5.0] - 2026-06-10
 
 ### Added

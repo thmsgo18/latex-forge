@@ -15,7 +15,10 @@ from latex_forge.project import (
     required_style_files,
     templates_dir,
     validate_name,
+    write_agents_md,
 )
+
+WRITING_GUIDE_MARKER = "## Writing an excellent document"
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +195,36 @@ def test_create_project_no_relative_paths_in_styles(tmp_path, monkeypatch):
     for sty in (tmp_path / "my-project" / "styles" / "packages").glob("*.sty"):
         content = sty.read_text(encoding="utf-8")
         assert "../../assets/" not in content, f"Unpatched path in {sty.name}"
+
+
+# ---------------------------------------------------------------------------
+# write_agents_md — writing-quality guide
+# ---------------------------------------------------------------------------
+
+def _agents_text(tmp_path, template):
+    write_agents_md(tmp_path, "demo", template)
+    return (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("template", ["project-report-fr", "project-report-en", "research"])
+def test_agents_md_includes_writing_guide_for_academic(tmp_path, template):
+    text = _agents_text(tmp_path, template)
+    assert WRITING_GUIDE_MARKER in text
+    assert "@@" not in text  # every token resolved
+
+
+@pytest.mark.parametrize("template", ["cv-fr", "cv-en", "blank"])
+def test_agents_md_omits_writing_guide_for_non_academic(tmp_path, template):
+    text = _agents_text(tmp_path, template)
+    assert WRITING_GUIDE_MARKER not in text
+    assert "@@" not in text
+
+
+def test_agents_md_writing_guide_for_gallery_template(tmp_path):
+    # Installed gallery templates (e.g. a thesis) fall into the "report" family.
+    text = _agents_text(tmp_path, "some-gallery-thesis")
+    assert WRITING_GUIDE_MARKER in text
+    assert "@@" not in text
 
 
 # ---------------------------------------------------------------------------

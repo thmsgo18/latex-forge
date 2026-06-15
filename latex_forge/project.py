@@ -140,6 +140,7 @@ def write_agents_md(target_dir: Path, name: str, template: str, engine: str = "l
         "@@STRUCTURE_ROWS@@": read("structure", f"{family}.md"),
         "@@CUSTOM_COMMANDS@@": read("commands", f"{commands_family}.md"),
         "@@ADD_CONTENT@@": read("content", f"{family}.md"),
+        "@@WRITING_GUIDE@@": read("writing", "academic.md") if family in ("report", "research") else "",
         "@@BIB_ERRORS@@": read("bib_errors.md") if has_bibliography else "",
     }
 
