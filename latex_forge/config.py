@@ -42,7 +42,7 @@ def load_config() -> dict:
 def get_default_template() -> str | None:
     """Return the user's configured default template name, if any.
 
-    Used by ``latex-forge new`` to preselect a template when ``--template``
+    Used by ``latex-forge create`` to preselect a template when ``--template``
     is not passed on the command line.
     """
     value = load_config().get("default_template")

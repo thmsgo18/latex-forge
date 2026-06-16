@@ -220,11 +220,43 @@ def test_agents_md_omits_writing_guide_for_non_academic(tmp_path, template):
     assert "@@" not in text
 
 
-def test_agents_md_writing_guide_for_gallery_template(tmp_path):
-    # Installed gallery templates (e.g. a thesis) fall into the "report" family.
+def test_agents_md_writing_guide_for_academic_gallery_template(tmp_path):
+    # Installed gallery template that has a bibliography (thesis, article…):
+    # the academic writing guide is included.
+    (tmp_path / "demo.tex").write_text(
+        "\\usepackage{biblatex}\n\\addbibresource{refs.bib}\n", encoding="utf-8"
+    )
     text = _agents_text(tmp_path, "some-gallery-thesis")
     assert WRITING_GUIDE_MARKER in text
     assert "@@" not in text
+
+
+def test_agents_md_omits_writing_guide_for_nonacademic_gallery_template(tmp_path):
+    # Installed gallery template without a bibliography (CV, poster, letter…):
+    # no academic writing guide, and a neutral (non-report) structure.
+    text = _agents_text(tmp_path, "some-gallery-cv")
+    assert WRITING_GUIDE_MARKER not in text
+    assert "@@" not in text
+
+
+def test_agents_md_gallery_template_uses_generic_structure(tmp_path):
+    # A gallery template must not be described as an academic report: it gets
+    # the neutral "generic" content, never the report-specific instructions.
+    text = _agents_text(tmp_path, "some-gallery-cv")
+    assert "installed template" in text
+
+
+@pytest.mark.parametrize(
+    "template",
+    ["blank", "cv-en", "cv-fr", "project-report-en", "project-report-fr",
+     "research", "some-gallery-template"],
+)
+def test_agents_md_all_fragments_resolve(tmp_path, template):
+    # Exercises every fragment write_agents_md can read (guards against a
+    # referenced fragment file going missing, e.g. forgotten in git).
+    text = _agents_text(tmp_path, template)
+    assert "@@" not in text
+    assert text.strip()
 
 
 # ---------------------------------------------------------------------------

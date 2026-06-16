@@ -88,6 +88,22 @@ def _check_latexmk() -> dict:
         return {"ok": True, "version": None}
 
 
+def _check_biber() -> dict:
+    """Check for biber, the backend used by templates with a biblatex bibliography."""
+    if not shutil.which("biber"):
+        return {"ok": False, "fix": "tlmgr install biber"}
+    try:
+        out = subprocess.run(
+            ["biber", "--version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        ver = out.stdout.strip().splitlines()[0] if out.stdout.strip() else None
+        return {"ok": True, "version": ver}
+    except Exception:
+        # biber is on PATH but --version failed; still treat as present.
+        return {"ok": True, "version": None}
+
+
 def _check_profile() -> dict:
     """Check whether the user has saved a profile (name/affiliation, etc.)."""
     from .profile import profile_path
@@ -119,6 +135,7 @@ def run_diagnose() -> dict:
         "pipx":              _check_pipx(),
         "texlive":           _check_texlive(),
         "latexmk":           _check_latexmk(),
+        "biber":             _check_biber(),
         "profile":           _check_profile(),
         "default_template":  _check_default_template(),
     }
@@ -158,6 +175,13 @@ def format_diagnose_text(data: dict) -> str:
         lines.append(_row(True, "latexmk", lmk.get("version") or ""))
     else:
         lines.append(_row(False, "latexmk", f"not found  →  run: {lmk.get('fix', 'sudo tlmgr install latexmk')}"))
+
+    # biber (only needed by templates with a biblatex bibliography)
+    bib = data["biber"]
+    if bib["ok"]:
+        lines.append(_row(True, "biber", bib.get("version") or ""))
+    else:
+        lines.append(_row(False, "biber", f"not found (needed for bibliographies)  →  run: {bib.get('fix', 'tlmgr install biber')}"))
 
     # Profile
     prof = data["profile"]

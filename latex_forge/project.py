@@ -105,10 +105,31 @@ def _render(template_text: str, replacements: dict[str, str]) -> str:
     return template_text
 
 
+_BIBLIOGRAPHY_MARKERS = ("biblatex", "addbibresource", "\\bibliography{", "printbibliography")
+
+
+def _project_uses_bibliography(target_dir: Path) -> bool:
+    """Return True if any .tex file in the project wires up a bibliography."""
+    for tex in target_dir.rglob("*.tex"):
+        try:
+            text = tex.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if any(marker in text for marker in _BIBLIOGRAPHY_MARKERS):
+            return True
+    return False
+
+
 def write_agents_md(target_dir: Path, name: str, template: str, engine: str = "lualatex") -> None:
-    """Generate AGENTS.md by assembling the fragments under `agents_templates/`."""
+    """Generate AGENTS.md by assembling the fragments under `agents_templates/`.
+
+    Built-in templates map to their dedicated fragment family. Installed
+    (gallery/user) templates have no bespoke fragments, so they fall back to a
+    neutral ``generic`` family — using report-specific structure, commands and
+    content for, say, a CV or a poster would be actively misleading.
+    """
     is_cv = template in ("cv-fr", "cv-en")
-    has_bibliography = template in ("project-report-fr", "project-report-en", "research")
+    builtin_with_bibliography = ("project-report-fr", "project-report-en", "research")
 
     if template == "blank":
         family = "blank"
@@ -116,8 +137,18 @@ def write_agents_md(target_dir: Path, name: str, template: str, engine: str = "l
         family = template
     elif template == "research":
         family = "research"
-    else:
+    elif template in ("project-report-en", "project-report-fr"):
         family = "report"
+    else:
+        family = "generic"
+
+    if family == "generic":
+        # An installed template can carry any kind of bibliography (or none),
+        # so detect it from the copied sources rather than a hard-coded list.
+        has_bibliography = _project_uses_bibliography(target_dir)
+    else:
+        has_bibliography = template in builtin_with_bibliography
+
     commands_family = "cv" if is_cv else family
 
     templates_dir = _agents_templates_dir()
@@ -140,7 +171,14 @@ def write_agents_md(target_dir: Path, name: str, template: str, engine: str = "l
         "@@STRUCTURE_ROWS@@": read("structure", f"{family}.md"),
         "@@CUSTOM_COMMANDS@@": read("commands", f"{commands_family}.md"),
         "@@ADD_CONTENT@@": read("content", f"{family}.md"),
-        "@@WRITING_GUIDE@@": read("writing", "academic.md") if family in ("report", "research") else "",
+        # Academic writing guidance suits reports/research and any installed
+        # template that has a bibliography (thesis, article…), but not a CV,
+        # poster, letter or invoice.
+        "@@WRITING_GUIDE@@": (
+            read("writing", "academic.md")
+            if family in ("report", "research") or (family == "generic" and has_bibliography)
+            else ""
+        ),
         "@@BIB_ERRORS@@": read("bib_errors.md") if has_bibliography else "",
     }
 

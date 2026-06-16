@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from latex_forge.profile import (
+    _latex_escape,
     apply_profile_to_project,
     clear_profile,
     load_profile,
@@ -286,3 +287,71 @@ def test_apply_cv_gallery_format(cv_en_gallery_project, full_profile):
     assert "thmsgo18" in content
     assert "thomas-gourmelen" in content
     assert "First LAST" not in content
+
+
+# ── LaTeX escaping of profile values (#6) ──────────────────────────────────
+
+
+def test_latex_escape_handles_specials():
+    assert _latex_escape("Arts & Métiers") == r"Arts \& Métiers"
+    assert _latex_escape("R&D 100% #1 a_b") == r"R\&D 100\% \#1 a\_b"
+    assert _latex_escape("a}b") == r"a\}b"
+
+
+def _gallery_metadata(tmp_path: Path, body: str) -> Path:
+    (tmp_path / "frontmatter").mkdir()
+    (tmp_path / "frontmatter" / "metadata.tex").write_text(body, encoding="utf-8")
+    return tmp_path
+
+
+def test_special_chars_escaped_in_gallery_metadata(tmp_path):
+    project = _gallery_metadata(tmp_path, "\\newcommand{\\universityname}{Example University}\n")
+    apply_profile_to_project(project, "some-gallery-template", {"university": "Arts & Métiers"})
+    content = (project / "frontmatter" / "metadata.tex").read_text(encoding="utf-8")
+    assert r"Arts \& Métiers" in content
+    assert "Arts & Métiers" not in content  # raw ampersand would break compilation
+
+
+def test_brace_in_value_does_not_corrupt_command(blank_project):
+    apply_profile_to_project(blank_project, "blank", {"first_name": "A}B", "last_name": ""})
+    content = (blank_project / "frontmatter" / "metadata.tex").read_text(encoding="utf-8")
+    assert r"\author{A\}B}" in content
+
+
+# ── authorfullname placeholder (#1, elegantbook) ───────────────────────────
+
+
+def test_authorfullname_is_filled(tmp_path, full_profile):
+    project = _gallery_metadata(tmp_path, "\\newcommand{\\authorfullname}{FirstName LASTNAME}\n")
+    apply_profile_to_project(project, "some-gallery-template", full_profile)
+    content = (project / "frontmatter" / "metadata.tex").read_text(encoding="utf-8")
+    assert "Thomas Gourmelen" in content
+    assert "FirstName LASTNAME" not in content
+
+
+# ── optional profile fields (#11) ──────────────────────────────────────────
+
+
+def test_optional_fields_injected_when_template_declares_them(tmp_path):
+    project = _gallery_metadata(
+        tmp_path,
+        "\\newcommand{\\cvwebsite}{w}\n"
+        "\\newcommand{\\cvfaculty}{f}\n"
+        "\\newcommand{\\cvcompany}{c}\n"
+        "\\newcommand{\\cvdepartment}{d}\n"
+        "\\newcommand{\\cvjobtitle}{j}\n",
+    )
+    profile = {
+        "website": "thomasg.dev",
+        "faculty": "UFR Informatique",
+        "company": "ACME",
+        "department": "R&D",
+        "job_title": "Engineer",
+    }
+    apply_profile_to_project(project, "some-gallery-template", profile)
+    content = (project / "frontmatter" / "metadata.tex").read_text(encoding="utf-8")
+    assert "thomasg.dev" in content
+    assert "UFR Informatique" in content
+    assert "ACME" in content
+    assert r"R\&D" in content  # also escaped
+    assert "Engineer" in content

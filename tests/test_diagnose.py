@@ -11,7 +11,7 @@ from latex_forge.diagnose import format_diagnose_text, run_diagnose
 
 def test_run_diagnose_returns_all_keys():
     data = run_diagnose()
-    expected_keys = {"latex_forge", "pipx", "texlive", "latexmk", "profile", "default_template"}
+    expected_keys = {"latex_forge", "pipx", "texlive", "latexmk", "biber", "profile", "default_template"}
     assert expected_keys == set(data.keys())
 
 
@@ -47,7 +47,18 @@ def test_format_diagnose_text_contains_section_labels():
     assert "latex-forge" in text
     assert "TeX Live" in text
     assert "latexmk" in text
+    assert "biber" in text
     assert "Profile" in text
+
+
+def test_format_diagnose_text_shows_biber_missing(monkeypatch):
+    import latex_forge.diagnose as diag
+
+    monkeypatch.setattr(diag, "_check_biber", lambda: {"ok": False, "fix": "tlmgr install biber"})
+    data = run_diagnose()
+    text = format_diagnose_text(data)
+    assert "biber" in text
+    assert "tlmgr install biber" in text
 
 
 def test_format_diagnose_text_shows_ok_icon_for_latex_forge():

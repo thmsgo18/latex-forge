@@ -3,7 +3,7 @@
 The profile (name, email, university, etc.) is stored once in
 ``~/.latex-forge/profile.toml`` and then substituted into the placeholders of
 every new project (CVs, reports, gallery templates), so the user doesn't have
-to retype the same information each time they run ``latex-forge new``.
+to retype the same information each time they run ``latex-forge create``.
 """
 from __future__ import annotations
 
@@ -164,12 +164,15 @@ def _apply_cv(
     if heading_file.exists():
         content = heading_file.read_text(encoding="utf-8")
 
+        # These values land in plain text, so escape LaTeX specials. The github
+        # and linkedin handles below are injected into URLs (and only ever
+        # contain letters, digits and hyphens), so they are left verbatim.
         if full_name:
-            content = content.replace(default_name, full_name)
+            content = content.replace(default_name, _latex_escape(full_name))
         if profile.get("phone"):
-            content = content.replace(default_phone, profile["phone"])
+            content = content.replace(default_phone, _latex_escape(profile["phone"]))
         if profile.get("email"):
-            content = content.replace("email@example.com", profile["email"])
+            content = content.replace("email@example.com", _latex_escape(profile["email"]))
         if profile.get("github"):
             g = profile["github"]
             content = content.replace(
@@ -265,6 +268,10 @@ def _apply_gallery_metadata(
     # ── Non-CV author fields ──────────────────────────────────────────────
     if full_name:
         content = _replace_newcmd(content, "authorname", full_name)
+        # `\authorfullname` is the placeholder for templates whose class already
+        # reserves `\authorname` as a label (e.g. elegantbook), so reusing
+        # `\authorname` there would raise "Command \authorname already defined".
+        content = _replace_newcmd(content, "authorfullname", full_name)
     if profile.get("email"):
         content = _replace_newcmd(content, "authoremail", profile["email"])
     if profile.get("phone"):
@@ -298,6 +305,23 @@ def _apply_gallery_metadata(
     if profile.get("supervisor"):
         content = _replace_newcmd(content, "supervisorname", profile["supervisor"])
 
+    # ── Optional fields ───────────────────────────────────────────────────
+    # Applied opportunistically: like every helper above, these are no-ops when
+    # the command is absent. No built-in or gallery template declares them yet,
+    # so they only take effect for custom templates that opt in by defining the
+    # matching command in frontmatter/metadata.tex.
+    if profile.get("website"):
+        content = _replace_newcmd(content, "authorwebsite", profile["website"])
+        content = _replace_newcmd(content, "cvwebsite",     profile["website"])
+    if profile.get("faculty"):
+        content = _replace_newcmd(content, "cvfaculty", profile["faculty"])
+    if profile.get("company"):
+        content = _replace_newcmd(content, "cvcompany", profile["company"])
+    if profile.get("department"):
+        content = _replace_newcmd(content, "cvdepartment", profile["department"])
+    if profile.get("job_title"):
+        content = _replace_newcmd(content, "cvjobtitle", profile["job_title"])
+
     # ── Project-UPC: uses \renewcommand ──────────────────────────────────
     if profile.get("supervisor"):
         content = _replace_renewcmd(content, "projetEncadrant", profile["supervisor"])
@@ -314,25 +338,52 @@ def _apply_gallery_metadata(
 # ── Regex helpers ─────────────────────────────────────────────────────────
 
 
+# LaTeX special characters that must be escaped before a profile value is
+# injected into a .tex file. Without this, a value as ordinary as a university
+# named "Arts & Métiers", a program "R&D", or an email "first_last@x.com"
+# would break compilation (or, for a stray "}", break the substitution itself).
+_LATEX_SPECIALS = {
+    "\\": r"\textbackslash{}",
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+
+
+def _latex_escape(value: str) -> str:
+    """Escape LaTeX special characters so a profile value can't break compilation."""
+    return "".join(_LATEX_SPECIALS.get(ch, ch) for ch in value)
+
+
 def _replace_newcmd(content: str, cmd: str, value: str) -> str:
     r"""\\newcommand{\cmd}{OLD} → \\newcommand{\cmd}{value}."""
+    value = _latex_escape(value)
     pat = re.compile(r"(\\newcommand\{\\" + re.escape(cmd) + r"\}\{)[^}]*(\})")
     return pat.sub(lambda m: m.group(1) + value + m.group(2), content)
 
 
 def _replace_renewcmd(content: str, cmd: str, value: str) -> str:
     r"""\\renewcommand{\cmd}{OLD} → \\renewcommand{\cmd}{value}."""
+    value = _latex_escape(value)
     pat = re.compile(r"(\\renewcommand\{\\" + re.escape(cmd) + r"\}\{)[^}]*(\})")
     return pat.sub(lambda m: m.group(1) + value + m.group(2), content)
 
 
 def _replace_cmd(content: str, cmd: str, value: str) -> str:
     r"""\\cmd{...} → \\cmd{value}. Applied only to non-commented lines."""
+    value = _latex_escape(value)
     pat = re.compile(r"(^\s*\\" + re.escape(cmd) + r"\{)[^}]*(\})", re.MULTILINE)
     return pat.sub(lambda m: m.group(1) + value + m.group(2), content)
 
 
 def _replace_addauthor(content: str, placeholder: str, value: str) -> str:
     r"""Replace first \\addauthor{placeholder}{} → \\addauthor{value}{}."""
+    value = _latex_escape(value)
     pat = re.compile(r"(\\addauthor\{)" + re.escape(placeholder) + r"(\}\{)")
     return pat.sub(lambda m: m.group(1) + value + m.group(2), content, count=1)
