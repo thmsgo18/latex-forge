@@ -1,0 +1,75 @@
+site_name: LaTeX Forge
+site_description: Command-line tool for creating, building and managing LaTeX projects
+site_author: Thomas Gourmelen
+repo_url: https://github.com/thmsgo18/latex-forge
+repo_name: thmsgo18/latex-forge
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/latex-forge-logo.png
+  favicon: assets/latex-forge-logo.png
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting started:
+    - Installation: installation.md
+    - First project: getting-started.md
+  - User guide:
+    - CLI reference: commands.md
+    - Profile: profile.md
+    - Templates: templates.md
+  - Architecture:
+    - Overview: architecture/overview.md
+    - Project creation: architecture/project-creation.md
+    - Build pipeline: architecture/build-pipeline.md
+    - Profile injection: architecture/profile-injection.md
+    - Template manager: architecture/template-manager.md
+  - Contributing: contributing.md

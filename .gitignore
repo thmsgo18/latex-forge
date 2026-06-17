@@ -17,6 +17,9 @@ dist/
 # Claude Code
 .claude/
 
+# MkDocs build output
+site/
+
 # LaTeX build
 **/build/
 **/*.aux
