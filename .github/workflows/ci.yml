@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0  # setuptools-scm needs tags to compute the version
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
