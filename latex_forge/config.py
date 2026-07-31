@@ -68,12 +68,39 @@ def get_default_sharing() -> str | None:
     """Return the user's configured default sharing mode, if valid.
 
     Used by ``latex-forge create`` to preselect a ``.gitignore`` sharing mode
-    (``full``, ``pdf-only``, or ``none``) when ``--sharing`` is not passed on
-    the command line. An unrecognized value is ignored rather than causing
-    an error.
+    (``full`` or ``pdf-only``) when ``--sharing`` is not passed on the command
+    line and versioning is enabled (``--repo create``/``existing``). An
+    unrecognized value — including the old ``none``, now expressed via
+    ``--repo none`` instead — is ignored rather than causing an error.
     """
     value = load_config().get("default_sharing")
-    if not isinstance(value, str) or value not in ("full", "pdf-only", "none"):
+    if not isinstance(value, str) or value not in ("full", "pdf-only"):
+        return None
+    return value
+
+
+def get_default_repo_mode() -> str | None:
+    """Return the user's configured default versioning mode, if valid.
+
+    Used by ``latex-forge create`` to preselect how the project is versioned
+    (``create`` a new GitHub repo, ``existing`` — already inside a versioned
+    folder, or ``none``) when ``--repo`` is not passed on the command line.
+    """
+    value = load_config().get("default_repo_mode")
+    if not isinstance(value, str) or value not in ("create", "existing", "none"):
+        return None
+    return value
+
+
+def get_default_visibility() -> str | None:
+    """Return the user's configured default new-repo visibility, if valid.
+
+    Used by ``latex-forge create --repo create`` to preselect the visibility
+    (``private`` or ``public``) of a newly created GitHub repository when
+    ``--visibility`` is not passed on the command line.
+    """
+    value = load_config().get("default_visibility")
+    if not isinstance(value, str) or value not in ("private", "public"):
         return None
     return value
 

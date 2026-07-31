@@ -72,3 +72,49 @@ def test_default_sharing_invalid_value_returns_none(tmp_path, monkeypatch):
     config_file.write_text('default_sharing = "everything"\n', encoding="utf-8")
     monkeypatch.setattr(config_module, "_CONFIG_PATH", config_file)
     assert config_module.get_default_sharing() is None
+
+
+def test_default_sharing_old_none_value_now_ignored(tmp_path, monkeypatch):
+    # "none" used to be a valid --sharing value; it's now expressed via --repo none instead.
+    config_file = tmp_path / ".latex-forge.toml"
+    config_file.write_text('default_sharing = "none"\n', encoding="utf-8")
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_file)
+    assert config_module.get_default_sharing() is None
+
+
+def test_no_config_file_returns_none_repo_mode(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", tmp_path / ".latex-forge.toml")
+    assert config_module.get_default_repo_mode() is None
+
+
+def test_default_repo_mode_read_from_config(tmp_path, monkeypatch):
+    config_file = tmp_path / ".latex-forge.toml"
+    config_file.write_text('default_repo_mode = "existing"\n', encoding="utf-8")
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_file)
+    assert config_module.get_default_repo_mode() == "existing"
+
+
+def test_default_repo_mode_invalid_value_returns_none(tmp_path, monkeypatch):
+    config_file = tmp_path / ".latex-forge.toml"
+    config_file.write_text('default_repo_mode = "everything"\n', encoding="utf-8")
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_file)
+    assert config_module.get_default_repo_mode() is None
+
+
+def test_no_config_file_returns_none_visibility(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", tmp_path / ".latex-forge.toml")
+    assert config_module.get_default_visibility() is None
+
+
+def test_default_visibility_read_from_config(tmp_path, monkeypatch):
+    config_file = tmp_path / ".latex-forge.toml"
+    config_file.write_text('default_visibility = "public"\n', encoding="utf-8")
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_file)
+    assert config_module.get_default_visibility() == "public"
+
+
+def test_default_visibility_invalid_value_returns_none(tmp_path, monkeypatch):
+    config_file = tmp_path / ".latex-forge.toml"
+    config_file.write_text('default_visibility = "everything"\n', encoding="utf-8")
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_file)
+    assert config_module.get_default_visibility() is None

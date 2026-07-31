@@ -9,15 +9,23 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import argcomplete
 
-from .config import get_default_output_dir, get_default_sharing, get_default_template
+from .config import (
+    get_default_output_dir,
+    get_default_repo_mode,
+    get_default_sharing,
+    get_default_template,
+    get_default_visibility,
+)
+from .github import gh_authenticated, gh_cli_available
 from .project import (
-    SHARING_MODES,
+    REPO_MODES,
     TEMPLATE_DESCRIPTIONS,
     available_templates,
     create_project,
@@ -27,6 +35,7 @@ from .project import (
     validate_name,
 )
 from .setup import (
+    _prompt_yes_no,
     is_first_run,
     mark_initialized,
     offer_open_vscode,
@@ -34,6 +43,9 @@ from .setup import (
     run_setup,
     warn_if_latex_missing,
 )
+
+
+_SHARING_CHOICES = ("full", "pdf-only")
 
 
 def _get_version() -> str:
@@ -114,6 +126,75 @@ def _ask_output_dir() -> Path:
     return path
 
 
+_REPO_MODE_CHOICES = [
+    ("create", "Create a new GitHub repository for this project"),
+    ("existing", "This folder is already inside a versioned (e.g. GitHub) folder"),
+    ("none", "Don't version this project"),
+]
+
+
+def _ask_repo_mode() -> str:
+    """Print a numbered list of versioning modes and prompt for a choice."""
+    default_mode = get_default_repo_mode() or "none"
+    print("How should this project be versioned?")
+    for i, (mode, desc) in enumerate(_REPO_MODE_CHOICES, 1):
+        marker = " (default)" if mode == default_mode else ""
+        print(f"  {i}. {desc}{marker}")
+    while True:
+        try:
+            answer = input(f"Choose [1-{len(_REPO_MODE_CHOICES)}]: ").strip()
+        except (EOFError, OSError, KeyboardInterrupt):
+            print("")
+            sys.exit(1)
+        if not answer:
+            return default_mode
+        try:
+            idx = int(answer) - 1
+            if 0 <= idx < len(_REPO_MODE_CHOICES):
+                return _REPO_MODE_CHOICES[idx][0]
+        except ValueError:
+            pass
+        print(f"Please enter a number between 1 and {len(_REPO_MODE_CHOICES)}.")
+
+
+def _ask_repo_name(default: str) -> str:
+    """Prompt for the new GitHub repository's name, defaulting to the project name."""
+    try:
+        answer = input(f"GitHub repository name [{default}]: ").strip()
+    except (EOFError, OSError, KeyboardInterrupt):
+        print("")
+        sys.exit(1)
+    return answer or default
+
+
+def _ask_visibility() -> str:
+    """Prompt for the new GitHub repository's visibility, defaulting to private."""
+    default_visibility = get_default_visibility() or "private"
+    try:
+        answer = input(f"Visibility [private/public] [{default_visibility}]: ").strip().lower()
+    except (EOFError, OSError, KeyboardInterrupt):
+        print("")
+        sys.exit(1)
+    if not answer:
+        return default_visibility
+    return "public" if answer.startswith("pub") else "private"
+
+
+def _ask_sharing() -> str:
+    """Prompt for what the .gitignore should track, defaulting to 'full'."""
+    default_sharing = get_default_sharing() or "full"
+    try:
+        answer = input(
+            f"What should be versioned — full sources + PDF, or pdf-only? [full/pdf-only] [{default_sharing}]: "
+        ).strip().lower()
+    except (EOFError, OSError, KeyboardInterrupt):
+        print("")
+        sys.exit(1)
+    if not answer:
+        return default_sharing
+    return "pdf-only" if answer.startswith("pdf") else "full"
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argparse parser with all latex-forge subcommands."""
     parser = argparse.ArgumentParser(
@@ -148,26 +229,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where the project will be created (default: current directory).",
     )
     create_parser.add_argument(
-        "--git",
-        action="store_true",
-        help="Initialize a git repository with an initial commit in the new project.",
+        "--repo",
+        choices=REPO_MODES,
+        default=None,
+        help=(
+            "How to version the project: 'create' a new GitHub repository (needs "
+            "--repo-name/--visibility and the GitHub CLI, authenticated), 'existing' "
+            "— this folder already lives inside a versioned (e.g. GitHub) folder, so "
+            "nothing git-related is touched, or 'none' (no versioning at all). "
+            "Defaults to 'default_repo_mode' in ~/.latex-forge.toml, or 'none'."
+        ),
+    )
+    create_parser.add_argument(
+        "--repo-name",
+        default=None,
+        help="Name of the GitHub repository to create (only with --repo create; defaults to the project name).",
+    )
+    create_parser.add_argument(
+        "--visibility",
+        choices=("private", "public"),
+        default=None,
+        help=(
+            "Visibility of the new GitHub repository (only with --repo create). "
+            "Defaults to 'default_visibility' in ~/.latex-forge.toml, or 'private'."
+        ),
     )
     create_parser.add_argument(
         "--sharing",
-        choices=SHARING_MODES,
+        choices=_SHARING_CHOICES,
         default=None,
         help=(
-            "What the generated .gitignore tracks: 'full' (sources + compiled PDF), "
-            "'pdf-only' (compiled PDF only), or 'none' (nothing, local-only project). "
-            "Defaults to the 'default_sharing' value in ~/.latex-forge.toml, or 'full'."
+            "What the generated .gitignore tracks (only with --repo create/existing): "
+            "'full' (sources + compiled PDF) or 'pdf-only' (compiled PDF only). "
+            "Defaults to 'default_sharing' in ~/.latex-forge.toml, or 'full'."
         ),
     )
     create_parser.add_argument(
         "--build-before-commit",
         action="store_true",
         help=(
-            "With --git and a PDF-sharing mode ('full' or 'pdf-only'), build the "
-            "project once before the initial commit so the PDF is included right away."
+            "With --repo create, build the project once before the initial commit "
+            "so the PDF is included right away instead of only after your first "
+            "manual build."
         ),
     )
 
@@ -252,6 +355,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--install-tex",
         action="store_true",
         help="Try to install a LaTeX distribution with a common package manager for the current OS.",
+    )
+    setup_parser.add_argument(
+        "--install-gh",
+        action="store_true",
+        help=(
+            "Try to install the GitHub CLI (gh) with a common package manager for the current OS. "
+            "Needed for `latex-forge create --repo create`."
+        ),
     )
 
     subparsers.add_parser(
@@ -661,9 +772,51 @@ def main(argv: list[str] | None = None) -> int:
             config_dir = get_default_output_dir()
             output_dir = config_dir if config_dir is not None else Path.cwd()
 
+        repo_mode_guided = args.repo is None and guided
+        repo_mode = args.repo
+        if repo_mode is None:
+            repo_mode = _ask_repo_mode() if guided else (get_default_repo_mode() or "none")
+
+        repo_name = args.repo_name
+        visibility = args.visibility
         sharing = args.sharing
-        if sharing is None:
-            sharing = get_default_sharing() or "full"
+
+        if repo_mode == "create":
+            if repo_mode_guided:
+                if repo_name is None:
+                    repo_name = _ask_repo_name(name)
+                if visibility is None:
+                    visibility = _ask_visibility()
+            if visibility is None:
+                visibility = get_default_visibility() or "private"
+            if repo_name is None:
+                repo_name = name
+
+            if not gh_cli_available():
+                print(
+                    "GitHub CLI (gh) not found — run 'latex-forge setup --install-gh' to install it.",
+                    file=sys.stderr,
+                )
+                return 1
+            if not gh_authenticated():
+                print(
+                    "Not authenticated with the GitHub CLI — run 'gh auth login', then try again.",
+                    file=sys.stderr,
+                )
+                return 1
+
+            if repo_mode_guided:
+                if not _prompt_yes_no(
+                    f"Create a {visibility} repository named '{repo_name}' on your GitHub account?"
+                ):
+                    print("Aborted.")
+                    return 1
+
+        if repo_mode in ("create", "existing"):
+            if sharing is None:
+                sharing = _ask_sharing() if repo_mode_guided else (get_default_sharing() or "full")
+        else:
+            sharing = "full"  # irrelevant when repo_mode == "none"
 
         first_run = is_first_run()
         if first_run:
@@ -675,7 +828,9 @@ def main(argv: list[str] | None = None) -> int:
                 name=name,
                 template=template,
                 output_dir=output_dir,
-                init_git=args.git,
+                repo_mode=repo_mode,
+                repo_name=repo_name,
+                visibility=visibility or "private",
                 sharing=sharing,
                 build_before_commit=args.build_before_commit,
             )
@@ -690,8 +845,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Next: fill in {first_file} then save to compile.")
         else:
             print("Next: fill in frontmatter/metadata.tex then save to compile.")
-        print(f"Sharing: {sharing}")
-        if args.git:
+
+        if repo_mode == "none":
+            print("Versioning: none (local-only project).")
+        else:
+            print(f"Versioning: {repo_mode}  |  Sharing: {sharing}")
+
+        if repo_mode == "create":
             if (target_dir / ".git").is_dir():
                 print("Initialized a git repository with an initial commit.")
             else:
@@ -699,12 +859,32 @@ def main(argv: list[str] | None = None) -> int:
                     "Warning: could not initialize git (is git installed?).",
                     file=sys.stderr,
                 )
-        pdf_tracked = any((target_dir / "build").glob("*.pdf"))
-        if args.git and sharing in ("full", "pdf-only") and not pdf_tracked:
-            print(
-                "Note: the compiled PDF isn't in the initial commit yet — run "
-                "'latex-forge build', then 'git add build/*.pdf && git commit' to share it."
+
+            remote_check = subprocess.run(
+                ["git", "-C", str(target_dir), "remote", "get-url", "origin"],
+                capture_output=True,
+                text=True,
+                check=False,
             )
+            if remote_check.returncode == 0:
+                print(f"GitHub repo: {remote_check.stdout.strip()}")
+            else:
+                print(
+                    "Warning: could not create the GitHub repository — check `gh auth status` "
+                    f"and that '{repo_name}' isn't already taken, then run:\n"
+                    f"  cd {target_dir} && gh repo create {repo_name} --{visibility or 'private'} "
+                    "--source=. --remote=origin --push",
+                    file=sys.stderr,
+                )
+
+            pdf_tracked = any((target_dir / "build").glob("*.pdf"))
+            if not pdf_tracked:
+                print(
+                    "Note: the compiled PDF isn't in the initial commit yet — run "
+                    "'latex-forge build', then 'git add build/*.pdf && git commit' to share it."
+                )
+        elif repo_mode == "existing":
+            print("This project isn't its own git repo — make sure its parent folder is versioned.")
 
         if not first_run:
             warn_if_latex_missing()
@@ -746,6 +926,7 @@ def main(argv: list[str] | None = None) -> int:
             check_only=args.check_only,
             skip_extensions=args.skip_extensions,
             install_tex=args.install_tex,
+            install_gh=args.install_gh,
         )
 
     parser.print_help()

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-31
+
+### Added
+- **`latex-forge create --repo {create,existing,none}`**: an open-ended versioning choice. `create` creates a brand-new GitHub repository for the project via the GitHub CLI (`gh`) — initializes git, commits, and pushes — so you never have to create it by hand; `existing` assumes the project folder already lives inside a versioned (e.g. GitHub) folder and leaves git untouched; `none` keeps the project fully local. Defaults to `default_repo_mode` in `~/.latex-forge.toml`, or `none`.
+- **`--repo-name`/`--visibility {private,public}`**: name and visibility (default `private`) for the GitHub repository created with `--repo create`.
+- **`latex-forge setup --install-gh`**: installs the GitHub CLI via the host's package manager (Homebrew/winget/apt/dnf/pacman), the same way `--install-tex` installs a TeX distribution. `latex-forge diagnose` now also reports whether `gh` is installed and authenticated.
+- The interactive `create` prompt now asks how to version the project (and, for `create`/`existing`, what to share) when run without flags, with a confirmation recap before actually creating a GitHub repository.
+- `GETTING_STARTED.md` and the post-create summary now report the chosen versioning mode and, for `create`, the created repository's URL.
+
+### Changed
+- **Breaking**: `--git` is replaced by `--repo create` (local git init + commit, plus creating a new GitHub repository) or `--repo existing` (nothing git-related is touched at all — for a project nested inside an already-versioned folder). `--sharing` no longer accepts `none` — use `--repo none` instead, which implies it.
+
 ## [0.6.0] - 2026-07-31
 
 ### Added

@@ -104,6 +104,26 @@ def _check_biber() -> dict:
         return {"ok": True, "version": None}
 
 
+def _check_gh_cli() -> dict:
+    """Check for the GitHub CLI (gh), used by `latex-forge create --repo create`."""
+    if not shutil.which("gh"):
+        return {"ok": False, "authenticated": False, "version": None}
+    try:
+        out = subprocess.run(
+            ["gh", "--version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        ver = out.stdout.strip().splitlines()[0] if out.stdout.strip() else None
+    except Exception:
+        ver = None
+    try:
+        auth = subprocess.run(["gh", "auth", "status"], capture_output=True, timeout=5)
+        authenticated = auth.returncode == 0
+    except Exception:
+        authenticated = False
+    return {"ok": True, "authenticated": authenticated, "version": ver}
+
+
 def _check_profile() -> dict:
     """Check whether the user has saved a profile (name/affiliation, etc.)."""
     from .profile import profile_path
@@ -136,6 +156,7 @@ def run_diagnose() -> dict:
         "texlive":           _check_texlive(),
         "latexmk":           _check_latexmk(),
         "biber":             _check_biber(),
+        "gh_cli":            _check_gh_cli(),
         "profile":           _check_profile(),
         "default_template":  _check_default_template(),
     }
@@ -182,6 +203,15 @@ def format_diagnose_text(data: dict) -> str:
         lines.append(_row(True, "biber", bib.get("version") or ""))
     else:
         lines.append(_row(False, "biber", f"not found (needed for bibliographies)  →  run: {bib.get('fix', 'tlmgr install biber')}"))
+
+    # GitHub CLI (only needed for `create --repo create`)
+    gh = data["gh_cli"]
+    if not gh["ok"]:
+        lines.append(_row(False, "GitHub CLI", "not found (needed for --repo create)  →  run: latex-forge setup --install-gh"))
+    elif not gh["authenticated"]:
+        lines.append(_row(False, "GitHub CLI", f"{gh.get('version') or ''} — not authenticated  →  run: gh auth login"))
+    else:
+        lines.append(_row(True, "GitHub CLI", gh.get("version") or ""))
 
     # Profile
     prof = data["profile"]

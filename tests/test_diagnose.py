@@ -11,7 +11,7 @@ from latex_forge.diagnose import format_diagnose_text, run_diagnose
 
 def test_run_diagnose_returns_all_keys():
     data = run_diagnose()
-    expected_keys = {"latex_forge", "pipx", "texlive", "latexmk", "biber", "profile", "default_template"}
+    expected_keys = {"latex_forge", "pipx", "texlive", "latexmk", "biber", "gh_cli", "profile", "default_template"}
     assert expected_keys == set(data.keys())
 
 

@@ -267,6 +267,65 @@ def install_tex_distribution() -> bool:
     return True
 
 
+def install_gh_cli() -> bool:
+    """Install the GitHub CLI (`gh`) using the host's native package manager.
+
+    Needed for `latex-forge create --repo create`. Doesn't touch GitHub
+    authentication — the user still has to run `gh auth login` themselves.
+    """
+    current_os = detect_os()
+
+    command: list[str] = []
+
+    if current_os == "macos":
+        if not command_exists("brew"):
+            print("Homebrew not found. Cannot install the GitHub CLI automatically on macOS.")
+            print("Install it manually: https://cli.github.com/")
+            return False
+        command = ["brew", "install", "gh"]
+    elif current_os == "windows":
+        if not command_exists("winget"):
+            print("winget not found. Cannot install the GitHub CLI automatically on Windows.")
+            print("Install it manually: https://cli.github.com/")
+            return False
+        command = [
+            "winget",
+            "install",
+            "-e",
+            "--id",
+            "GitHub.cli",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+        ]
+    elif current_os == "linux":
+        sudo_prefix = privilege_prefix()
+        if command_exists("apt-get"):
+            command = [*sudo_prefix, "apt-get", "install", "-y", "gh"]
+        elif command_exists("dnf"):
+            command = [*sudo_prefix, "dnf", "install", "-y", "gh"]
+        elif command_exists("pacman"):
+            command = [*sudo_prefix, "pacman", "-S", "--needed", "github-cli"]
+        else:
+            print("No supported package manager detected automatically on Linux.")
+            print("Install the GitHub CLI manually: https://cli.github.com/")
+            return False
+    else:
+        print(f"OS not supported for automatic installation: {current_os}")
+        return False
+
+    print("Installing the GitHub CLI (gh)")
+    print(" ".join(command))
+    result = subprocess.run(command, check=False)
+    if result.returncode != 0:
+        print("")
+        print("[warn] Automatic installation failed.")
+        return False
+
+    print("")
+    print("[ok] GitHub CLI installed. Run `gh auth login` to authenticate.")
+    return True
+
+
 def print_tool_status() -> tuple[bool, bool]:
     """Print availability of required and template-specific LaTeX tools.
 
@@ -377,19 +436,27 @@ def run_setup(
     check_only: bool = False,
     skip_extensions: bool = False,
     install_tex: bool = False,
+    install_gh: bool = False,
 ) -> int:
     """Implement `latex-forge setup`: report or fix the local LaTeX environment.
 
     With *check_only*, nothing is installed — only the current status is
     printed. Otherwise, recommended VS Code extensions are installed (unless
-    *skip_extensions*), and a missing TeX distribution is installed either
-    because *install_tex* was requested or the user agrees to a prompt.
+    *skip_extensions*), a missing TeX distribution is installed either
+    because *install_tex* was requested or the user agrees to a prompt, and
+    the GitHub CLI is installed if *install_gh* was requested (needed for
+    `latex-forge create --repo create`; doesn't affect the return code, since
+    it's unrelated to LaTeX compilation readiness).
     Returns 0 if the environment ends up ready for compilation, 1 otherwise,
     or 2 for an invalid combination of flags.
     """
-    if check_only and install_tex:
-        print("`--check-only` and `--install-tex` cannot be used together.")
+    if check_only and (install_tex or install_gh):
+        print("`--check-only` cannot be combined with `--install-tex`/`--install-gh`.")
         return 2
+
+    if install_gh and not command_exists("gh"):
+        print("")
+        install_gh_cli()
 
     print(f"OS detected: {detect_os()}")
     print(f"Python: {sys.executable}")

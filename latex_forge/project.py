@@ -625,11 +625,16 @@ def init_git_repo(target_dir: Path) -> bool:
     return True
 
 
+REPO_MODES = ("create", "existing", "none")
+
+
 def create_project(
     name: str,
     template: str,
     output_dir: Path | None = None,
-    init_git: bool = False,
+    repo_mode: str = "none",
+    repo_name: str | None = None,
+    visibility: str = "private",
     sharing: str = "full",
     build_before_commit: bool = False,
 ) -> tuple[Path, Path]:
@@ -638,20 +643,32 @@ def create_project(
     Copies the template, brings in its required local .sty files and shared
     logo assets, generates the VS Code/.gitignore/setup-script/GETTING_STARTED/
     AGENTS.md companion files, applies the user's saved profile (if any), and
-    optionally initializes a git repository. The partially created directory
-    is removed if any step fails.
+    sets up versioning per *repo_mode*. The partially created directory is
+    removed if any step fails.
 
-    *sharing* controls what the generated ``.gitignore`` tracks: ``full``
-    (sources + compiled PDF), ``pdf-only`` (compiled PDF only) or ``none``
-    (nothing, local-only project). When *init_git* and *build_before_commit*
-    are both set and *sharing* isn't ``none``, the project is built once
-    before the initial commit so the PDF is included right away instead of
-    only appearing after the user's first manual build.
+    *repo_mode* controls versioning:
+    - ``create``: initializes a local git repo, commits, and creates a new
+      GitHub repository for it via `gh` (best-effort — a failed remote
+      creation doesn't roll back the local project or its local git repo).
+    - ``existing``: assumes the project folder already lives inside a
+      versioned (e.g. GitHub) folder — no local git init, nothing created.
+    - ``none``: no versioning at all; the generated ``.gitignore`` excludes
+      everything regardless of *sharing*.
+
+    *sharing* controls what the generated ``.gitignore`` tracks when
+    *repo_mode* isn't ``none``: ``full`` (sources + compiled PDF) or
+    ``pdf-only`` (compiled PDF only). When *repo_mode* is ``create`` and
+    *build_before_commit* is set, the project is built once before the
+    initial commit so the PDF is included right away instead of only
+    appearing after the user's first manual build.
 
     Returns ``(target_dir, main_tex_file)``.
     """
     validate_name(name)
-    if sharing not in SHARING_MODES:
+    if repo_mode not in REPO_MODES:
+        raise ValueError(f"Unknown repo mode: {repo_mode!r} (expected one of {REPO_MODES})")
+    effective_sharing = "none" if repo_mode == "none" else sharing
+    if effective_sharing not in SHARING_MODES:
         raise ValueError(f"Unknown sharing mode: {sharing!r} (expected one of {SHARING_MODES})")
 
     source_dir = _find_template_source(template)
@@ -693,7 +710,7 @@ def create_project(
         engine = _read_template_engine(source_dir)
         write_project_vscode_settings(target_dir, engine)
         write_project_vscode_extensions(target_dir)
-        write_project_gitignore(target_dir, sharing=sharing)
+        write_project_gitignore(target_dir, sharing=effective_sharing)
         write_project_setup_scripts(target_dir)
 
         write_getting_started_guide(
@@ -701,7 +718,7 @@ def create_project(
             name,
             template,
             engine=engine,
-            sharing=sharing,
+            sharing=effective_sharing,
             build_before_commit=build_before_commit,
         )
         write_agents_md(target_dir, name, template, engine=engine)
@@ -709,12 +726,13 @@ def create_project(
         from .profile import apply_profile_to_project, load_profile
         apply_profile_to_project(target_dir, template, load_profile())
 
-        if init_git and build_before_commit and sharing != "none":
-            from .build import run_build
-            run_build(target_dir)
-
-        if init_git:
+        if repo_mode == "create":
+            if build_before_commit:
+                from .build import run_build
+                run_build(target_dir)
             init_git_repo(target_dir)
+            from .github import create_github_repo
+            create_github_repo(target_dir, repo_name or name, visibility)
     except Exception:
         shutil.rmtree(target_dir, ignore_errors=True)
         raise
