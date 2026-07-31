@@ -29,9 +29,10 @@ Save `@@NAME@@.tex` in VS Code → LaTeX Workshop compiles automatically → PDF
 | `figures/` | TikZ/pgfplots diagrams (LaTeX source figures, not image files) |
 | `assets/logos/` | University and project logos |
 @@EXTRA_FOLDERS@@| `styles/packages/` | Embedded LaTeX styles — do not edit |
-| `build/` | Compiled PDF — auto-generated, do not commit |
+| `build/` | @@BUILD_ROW@@ |
 
 ---
+@@SHARING_NOTE@@
 
 ## Common operations
 

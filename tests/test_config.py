@@ -53,3 +53,22 @@ def test_empty_template_string_returns_none(tmp_path, monkeypatch):
     config_file.write_text('default_template = ""\n', encoding="utf-8")
     monkeypatch.setattr(config_module, "_CONFIG_PATH", config_file)
     assert config_module.get_default_template() is None
+
+
+def test_no_config_file_returns_none_sharing(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", tmp_path / ".latex-forge.toml")
+    assert config_module.get_default_sharing() is None
+
+
+def test_default_sharing_read_from_config(tmp_path, monkeypatch):
+    config_file = tmp_path / ".latex-forge.toml"
+    config_file.write_text('default_sharing = "pdf-only"\n', encoding="utf-8")
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_file)
+    assert config_module.get_default_sharing() == "pdf-only"
+
+
+def test_default_sharing_invalid_value_returns_none(tmp_path, monkeypatch):
+    config_file = tmp_path / ".latex-forge.toml"
+    config_file.write_text('default_sharing = "everything"\n', encoding="utf-8")
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_file)
+    assert config_module.get_default_sharing() is None

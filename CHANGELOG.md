@@ -6,9 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-31
+
 ### Added
+- **`latex-forge create --sharing {full,pdf-only,none}`**: controls what the generated `.gitignore` tracks — `full` shares the LaTeX sources and the compiled PDF, `pdf-only` shares only the compiled PDF, and `none` keeps the whole project local. Defaults to `full`, or to `default_sharing` in `~/.latex-forge.toml` if set.
+- **`latex-forge create --build-before-commit`**: with `--git` and a PDF-sharing mode, builds the project once before the initial commit so the compiled PDF is included right away instead of only appearing after your first manual build.
+- `GETTING_STARTED.md` now documents the chosen sharing mode, with a reminder to build and commit the PDF yourself when it isn't in the initial commit yet.
 - Generated `AGENTS.md` now includes a **writing-quality guide** for academic documents (reports, research articles, theses and any gallery template in the `report`/`research` families). It states the quality bar — start from the real source material (read the project/code/data the report documents, never invent), clear thesis, evidence over assertion, signposting, depth, right length (no padding), varied layout (lists, tables, figures, formulas — not walls of text), critical stance, register, coherence — plus a pre-finish self-review checklist, so a single "write the report" prompt yields a substantive draft rather than a skeleton. CV and blank projects are unaffected.
 - The shared `AGENTS.md` **Content guidelines** were hardened for rendering quality across all templates: nothing overflowing the margins (`Overfull \hbox`), correctly sized tables with no cell content bleeding past its row/column, diagrams verified overlap-free on the PDF (and colour encouraged for clarity), and a table of contents kept to a single page.
+
+### Fixed
+- `latex-forge create --git` no longer silently reports "could not initialize git" when nothing is staged for the initial commit (e.g. with `--sharing none`) — the initial commit now uses `--allow-empty`.
 
 ## [0.5.0] - 2026-06-10
 

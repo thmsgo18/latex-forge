@@ -16,6 +16,7 @@ from latex_forge.project import (
     templates_dir,
     validate_name,
     write_agents_md,
+    write_project_gitignore,
 )
 
 WRITING_GUIDE_MARKER = "## Writing an excellent document"
@@ -195,6 +196,105 @@ def test_create_project_no_relative_paths_in_styles(tmp_path, monkeypatch):
     for sty in (tmp_path / "my-project" / "styles" / "packages").glob("*.sty"):
         content = sty.read_text(encoding="utf-8")
         assert "../../assets/" not in content, f"Unpatched path in {sty.name}"
+
+
+# ---------------------------------------------------------------------------
+# write_project_gitignore / sharing modes
+# ---------------------------------------------------------------------------
+
+def test_gitignore_full_whitelists_pdf(tmp_path):
+    write_project_gitignore(tmp_path, sharing="full")
+    content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+    assert "build/*" in content
+    assert "!build/*.pdf" in content
+    assert "*.aux" in content
+
+
+def test_gitignore_pdf_only_ignores_everything_but_pdf(tmp_path):
+    write_project_gitignore(tmp_path, sharing="pdf-only")
+    content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+    assert "/*" in content
+    assert "!/build/" in content
+    assert "!/build/*.pdf" in content
+    assert "!/.gitignore" in content
+
+
+def test_gitignore_none_ignores_everything(tmp_path):
+    write_project_gitignore(tmp_path, sharing="none")
+    assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == "*\n"
+
+
+def test_gitignore_unknown_sharing_mode(tmp_path):
+    with pytest.raises(ValueError, match="Unknown sharing mode"):
+        write_project_gitignore(tmp_path, sharing="everything")
+
+
+def test_create_project_unknown_sharing_mode(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match="Unknown sharing mode"):
+        create_project("my-project", "project-report-en", sharing="everything")
+    assert not (tmp_path / "my-project").exists()
+
+
+def test_create_project_sharing_pdf_only_content(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target_dir, _ = create_project("my-project", "project-report-en", sharing="pdf-only")
+    gitignore = (target_dir / ".gitignore").read_text(encoding="utf-8")
+    assert "!/build/*.pdf" in gitignore
+    getting_started = (target_dir / "GETTING_STARTED.md").read_text(encoding="utf-8")
+    assert "only the compiled PDF" in getting_started.lower() or "Only the compiled PDF" in getting_started
+
+
+def test_create_project_sharing_none_with_git_still_initializes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "Test")
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "Test")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+    target_dir, _ = create_project(
+        "my-project", "project-report-en", init_git=True, sharing="none"
+    )
+
+    # Everything is gitignored, so `git add -A` stages nothing — the
+    # `--allow-empty` fix in init_git_repo must still let the initial
+    # commit (and thus the repo) succeed instead of silently "failing".
+    assert (target_dir / ".git").is_dir()
+    log = subprocess.run(
+        ["git", "log", "--oneline"],
+        cwd=target_dir,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "Initial commit" in log.stdout
+
+
+def test_create_project_build_before_commit_calls_run_build(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "Test")
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "Test")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+    with patch("latex_forge.build.run_build", return_value=0) as mock_build:
+        create_project(
+            "my-project",
+            "project-report-en",
+            init_git=True,
+            sharing="full",
+            build_before_commit=True,
+        )
+    mock_build.assert_called_once()
+
+
+def test_create_project_no_build_before_commit_by_default(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "Test")
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "Test")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+    with patch("latex_forge.build.run_build") as mock_build:
+        create_project("my-project", "project-report-en", init_git=True, sharing="full")
+    mock_build.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

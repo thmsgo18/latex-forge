@@ -186,8 +186,50 @@ def write_agents_md(target_dir: Path, name: str, template: str, engine: str = "l
     (target_dir / "AGENTS.md").write_text(content, encoding="utf-8")
 
 
+_BUILD_ROW_TEXT = {
+    "full": "Compiled PDF — the PDF is tracked (`build/*.pdf`); everything else here is auto-generated, do not commit",
+    "pdf-only": "Only the compiled PDF (`build/*.pdf`) is tracked — LaTeX sources are intentionally not shared in this project",
+    "none": "Auto-generated — nothing in this project is tracked by git (local-only project)",
+}
+
+
+def _sharing_note(sharing: str, build_before_commit: bool) -> str:
+    """Render the '## Sharing' section documenting the chosen git sharing mode."""
+    intro = {
+        "full": (
+            "This project shares both the LaTeX sources and the compiled PDF: "
+            "everything is tracked except build artifacts other than the final PDF."
+        ),
+        "pdf-only": (
+            "This project shares only the compiled PDF: LaTeX sources, assets, and "
+            "companion files stay local and are not tracked by git."
+        ),
+        "none": (
+            "This project is local-only: nothing is tracked by git, not even the "
+            "compiled PDF. Change this with `latex-forge create --sharing`."
+        ),
+    }[sharing]
+
+    lines = ["## Sharing", "", intro]
+
+    if sharing in ("full", "pdf-only") and not build_before_commit:
+        lines += [
+            "",
+            "> The compiled PDF isn't in the initial commit yet — it doesn't exist "
+            "until you build. Run `latex-forge build`, then `git add build/*.pdf && "
+            "git commit` to share it.",
+        ]
+
+    return "\n".join(lines) + "\n"
+
+
 def write_getting_started_guide(
-    target_dir: Path, name: str, template: str, engine: str = "lualatex"
+    target_dir: Path,
+    name: str,
+    template: str,
+    engine: str = "lualatex",
+    sharing: str = "full",
+    build_before_commit: bool = False,
 ) -> None:
     """Generate GETTING_STARTED.md by assembling the fragments under `getting_started_templates/`."""
     templates_dir = _getting_started_templates_dir()
@@ -196,13 +238,21 @@ def write_getting_started_guide(
         return _read_fragment(templates_dir, *parts)
 
     engine_display = _ENGINE_DISPLAY.get(engine, engine)
+    build_row = _BUILD_ROW_TEXT[sharing]
+    sharing_note = _sharing_note(sharing, build_before_commit)
 
     if template in ("cv-fr", "cv-en"):
         content = _render(read(f"{template}.md"), {"@@NAME@@": name})
     elif template == "blank":
         content = _render(
             read("blank.md"),
-            {"@@NAME@@": name, "@@ENGINE@@": engine, "@@ENGINE_DISPLAY@@": engine_display},
+            {
+                "@@NAME@@": name,
+                "@@ENGINE@@": engine,
+                "@@ENGINE_DISPLAY@@": engine_display,
+                "@@BUILD_ROW@@": build_row,
+                "@@SHARING_NOTE@@": sharing_note,
+            },
         )
     else:
         content = _render(
@@ -217,6 +267,8 @@ def write_getting_started_guide(
                 "@@BIBLIOGRAPHY_SECTION@@": _read_fragment_if_exists(
                     templates_dir, "generic", "bibliography", f"{template}.md"
                 ),
+                "@@BUILD_ROW@@": build_row,
+                "@@SHARING_NOTE@@": sharing_note,
             },
         )
 
@@ -454,9 +506,13 @@ def write_project_vscode_extensions(target_dir: Path) -> None:
     shutil.copy2(source_path, vscode_dir / "extensions.json")
 
 
-def write_project_gitignore(target_dir: Path) -> None:
-    """Write a .gitignore covering LaTeX build artifacts for the new project."""
-    gitignore_content = """build/
+SHARING_MODES = ("full", "pdf-only", "none")
+
+# `full`: share the LaTeX sources and the compiled PDF — ignore everything
+# else `build/` produces (aux files, logs, ...) via a `build/*` + `!*.pdf`
+# whitelist rather than ignoring `build/` outright.
+_GITIGNORE_FULL = """build/*
+!build/*.pdf
 .DS_Store
 *.aux
 *.acn
@@ -490,6 +546,38 @@ def write_project_gitignore(target_dir: Path) -> None:
 *.xdv
 _minted-*/
 """
+
+# `pdf-only`: share only the compiled PDF — everything else (sources,
+# assets, companion files) stays local. `/build/*` + `!/build/*.pdf` is the
+# same whitelist trick as above, nested one level deeper since `/*` already
+# excludes `build/` itself.
+_GITIGNORE_PDF_ONLY = """/*
+!/build/
+/build/*
+!/build/*.pdf
+!/.gitignore
+"""
+
+# `none`: a personal document (e.g. a cheat sheet for the author) — nothing
+# is tracked, the project stays local.
+_GITIGNORE_NONE = "*\n"
+
+
+def write_project_gitignore(target_dir: Path, sharing: str = "full") -> None:
+    """Write a .gitignore for the new project, matching the chosen *sharing* mode.
+
+    - ``full``: share LaTeX sources and the compiled PDF.
+    - ``pdf-only``: share only the compiled PDF, keep sources local.
+    - ``none``: keep the whole project local, nothing tracked.
+    """
+    if sharing not in SHARING_MODES:
+        raise ValueError(f"Unknown sharing mode: {sharing!r} (expected one of {SHARING_MODES})")
+
+    gitignore_content = {
+        "full": _GITIGNORE_FULL,
+        "pdf-only": _GITIGNORE_PDF_ONLY,
+        "none": _GITIGNORE_NONE,
+    }[sharing]
     (target_dir / ".gitignore").write_text(gitignore_content, encoding="utf-8")
 
 
@@ -514,14 +602,20 @@ def write_project_setup_scripts(target_dir: Path) -> None:
 
 
 def init_git_repo(target_dir: Path) -> bool:
-    """Initialize a git repository with an initial commit. Returns True on success."""
+    """Initialize a git repository with an initial commit. Returns True on success.
+
+    The commit uses ``--allow-empty``: with a ``none`` (or not-yet-built
+    ``pdf-only``/``full``) sharing mode, ``.gitignore`` can exclude every file,
+    so nothing gets staged — a plain ``git commit`` would fail in that case
+    even though ``git init`` succeeded.
+    """
     if shutil.which("git") is None:
         return False
     try:
         subprocess.run(["git", "init"], cwd=target_dir, capture_output=True, check=True)
         subprocess.run(["git", "add", "-A"], cwd=target_dir, capture_output=True, check=True)
         subprocess.run(
-            ["git", "commit", "-m", "Initial commit"],
+            ["git", "commit", "--allow-empty", "-m", "Initial commit"],
             cwd=target_dir,
             capture_output=True,
             check=True,
@@ -536,6 +630,8 @@ def create_project(
     template: str,
     output_dir: Path | None = None,
     init_git: bool = False,
+    sharing: str = "full",
+    build_before_commit: bool = False,
 ) -> tuple[Path, Path]:
     """Scaffold a new project named *name* from *template* under *output_dir*.
 
@@ -545,9 +641,18 @@ def create_project(
     optionally initializes a git repository. The partially created directory
     is removed if any step fails.
 
+    *sharing* controls what the generated ``.gitignore`` tracks: ``full``
+    (sources + compiled PDF), ``pdf-only`` (compiled PDF only) or ``none``
+    (nothing, local-only project). When *init_git* and *build_before_commit*
+    are both set and *sharing* isn't ``none``, the project is built once
+    before the initial commit so the PDF is included right away instead of
+    only appearing after the user's first manual build.
+
     Returns ``(target_dir, main_tex_file)``.
     """
     validate_name(name)
+    if sharing not in SHARING_MODES:
+        raise ValueError(f"Unknown sharing mode: {sharing!r} (expected one of {SHARING_MODES})")
 
     source_dir = _find_template_source(template)
 
@@ -588,14 +693,25 @@ def create_project(
         engine = _read_template_engine(source_dir)
         write_project_vscode_settings(target_dir, engine)
         write_project_vscode_extensions(target_dir)
-        write_project_gitignore(target_dir)
+        write_project_gitignore(target_dir, sharing=sharing)
         write_project_setup_scripts(target_dir)
 
-        write_getting_started_guide(target_dir, name, template, engine=engine)
+        write_getting_started_guide(
+            target_dir,
+            name,
+            template,
+            engine=engine,
+            sharing=sharing,
+            build_before_commit=build_before_commit,
+        )
         write_agents_md(target_dir, name, template, engine=engine)
 
         from .profile import apply_profile_to_project, load_profile
         apply_profile_to_project(target_dir, template, load_profile())
+
+        if init_git and build_before_commit and sharing != "none":
+            from .build import run_build
+            run_build(target_dir)
 
         if init_git:
             init_git_repo(target_dir)

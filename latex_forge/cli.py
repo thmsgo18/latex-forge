@@ -15,8 +15,9 @@ from pathlib import Path
 
 import argcomplete
 
-from .config import get_default_output_dir, get_default_template
+from .config import get_default_output_dir, get_default_sharing, get_default_template
 from .project import (
+    SHARING_MODES,
     TEMPLATE_DESCRIPTIONS,
     available_templates,
     create_project,
@@ -150,6 +151,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--git",
         action="store_true",
         help="Initialize a git repository with an initial commit in the new project.",
+    )
+    create_parser.add_argument(
+        "--sharing",
+        choices=SHARING_MODES,
+        default=None,
+        help=(
+            "What the generated .gitignore tracks: 'full' (sources + compiled PDF), "
+            "'pdf-only' (compiled PDF only), or 'none' (nothing, local-only project). "
+            "Defaults to the 'default_sharing' value in ~/.latex-forge.toml, or 'full'."
+        ),
+    )
+    create_parser.add_argument(
+        "--build-before-commit",
+        action="store_true",
+        help=(
+            "With --git and a PDF-sharing mode ('full' or 'pdf-only'), build the "
+            "project once before the initial commit so the PDF is included right away."
+        ),
     )
 
     build_subparser = subparsers.add_parser(
@@ -642,6 +661,10 @@ def main(argv: list[str] | None = None) -> int:
             config_dir = get_default_output_dir()
             output_dir = config_dir if config_dir is not None else Path.cwd()
 
+        sharing = args.sharing
+        if sharing is None:
+            sharing = get_default_sharing() or "full"
+
         first_run = is_first_run()
         if first_run:
             run_first_launch_check()
@@ -653,6 +676,8 @@ def main(argv: list[str] | None = None) -> int:
                 template=template,
                 output_dir=output_dir,
                 init_git=args.git,
+                sharing=sharing,
+                build_before_commit=args.build_before_commit,
             )
         except (ValueError, FileExistsError) as exc:
             print(str(exc), file=sys.stderr)
@@ -665,6 +690,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Next: fill in {first_file} then save to compile.")
         else:
             print("Next: fill in frontmatter/metadata.tex then save to compile.")
+        print(f"Sharing: {sharing}")
         if args.git:
             if (target_dir / ".git").is_dir():
                 print("Initialized a git repository with an initial commit.")
@@ -673,6 +699,12 @@ def main(argv: list[str] | None = None) -> int:
                     "Warning: could not initialize git (is git installed?).",
                     file=sys.stderr,
                 )
+        pdf_tracked = any((target_dir / "build").glob("*.pdf"))
+        if args.git and sharing in ("full", "pdf-only") and not pdf_tracked:
+            print(
+                "Note: the compiled PDF isn't in the initial commit yet — run "
+                "'latex-forge build', then 'git add build/*.pdf && git commit' to share it."
+            )
 
         if not first_run:
             warn_if_latex_missing()

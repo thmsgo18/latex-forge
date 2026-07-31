@@ -64,3 +64,17 @@ def get_default_output_dir() -> Path | None:
     return path if path.is_dir() else None
 
 
+def get_default_sharing() -> str | None:
+    """Return the user's configured default sharing mode, if valid.
+
+    Used by ``latex-forge create`` to preselect a ``.gitignore`` sharing mode
+    (``full``, ``pdf-only``, or ``none``) when ``--sharing`` is not passed on
+    the command line. An unrecognized value is ignored rather than causing
+    an error.
+    """
+    value = load_config().get("default_sharing")
+    if not isinstance(value, str) or value not in ("full", "pdf-only", "none"):
+        return None
+    return value
+
+

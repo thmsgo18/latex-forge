@@ -24,9 +24,10 @@ Save `@@NAME@@.tex` in VS Code → LaTeX Workshop compiles automatically → PDF
 |---|---|
 | `frontmatter/metadata.tex` | Document title, author, date |
 | `sections/content.tex` | Main content |
-| `build/` | Compiled PDF — auto-generated, do not commit |
+| `build/` | @@BUILD_ROW@@ |
 
 ---
+@@SHARING_NOTE@@
 
 ## Common operations
 
