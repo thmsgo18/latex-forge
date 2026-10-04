@@ -1,0 +1,48 @@
+name: Verify release
+
+# Installs a released version from PyPI on each OS, the way users do, and
+# checks that it runs. Called by publish.yml after each release; can also be
+# run by hand from the Actions tab for any published version.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version published on PyPI (e.g. 0.8.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      # Full version: setup-uv publishes no floating major tag.
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Install the release from PyPI
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # PyPI can take a minute to serve a new release everywhere.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if uv tool install --managed-python --refresh "latex-forge==$VERSION"; then break; fi
+            sleep 30
+          done
+          lf="$(uv tool dir --bin)/latex-forge"
+          "$lf" --version | grep -F "$VERSION"
+          # Runs the whole setup check (no LaTeX on the runner, so exit 1 is expected).
+          "$lf" setup --check-only --skip-extensions || true
+          "$lf" create --name smoke --template blank --output "$RUNNER_TEMP" --repo none --skip-packages
+          test -f "$RUNNER_TEMP/smoke/smoke.tex"
