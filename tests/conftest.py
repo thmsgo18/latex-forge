@@ -15,3 +15,19 @@ def _prime_platform_cache():
     subprocess.run with a fake would receive that call instead.
     """
     platform.uname()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_home(request, tmp_path_factory, monkeypatch):
+    """Never read or write the real home: profile, config, installed
+    templates, first-run marker, TinyTeX location all resolve under a fresh
+    temporary HOME. Tests that need a specific HOME still set their own.
+    Integration tests keep the real HOME: that's where TinyTeX is installed.
+    """
+    if request.node.get_closest_marker("integration"):
+        return None
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.delenv("TINYTEX_DIR", raising=False)
+    return home

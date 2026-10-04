@@ -20,7 +20,14 @@ else:
     except ImportError:
         tomllib = None  # type: ignore[assignment]
 
-_CONFIG_PATH = Path.home() / ".latex-forge.toml"
+# None means ~/.latex-forge.toml, resolved when read (not at import time, so a
+# changed HOME — e.g. in tests — is honoured). Tests may point it elsewhere.
+_CONFIG_PATH: Path | None = None
+
+
+def config_path() -> Path:
+    """Location of the user's configuration file."""
+    return _CONFIG_PATH or Path.home() / ".latex-forge.toml"
 
 
 def load_config() -> dict:
@@ -30,10 +37,11 @@ def load_config() -> dict:
     available, or if the file can't be parsed — configuration is purely
     optional, so any failure here should not break the CLI.
     """
-    if tomllib is None or not _CONFIG_PATH.exists():
+    path = config_path()
+    if tomllib is None or not path.exists():
         return {}
     try:
-        with open(_CONFIG_PATH, "rb") as f:
+        with open(path, "rb") as f:
             return tomllib.load(f)
     except Exception:
         return {}

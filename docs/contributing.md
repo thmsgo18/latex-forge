@@ -25,7 +25,7 @@ Ruff is configured in `pyproject.toml`. All checks must pass before submitting a
 pytest tests/ -v
 ```
 
-Tests do not compile LaTeX and do not require a TeX Live installation. They test Python logic: project scaffolding, profile injection, build command construction, template installation, and diagnostics.
+Unit tests do not compile LaTeX and do not require a TeX installation: tools like `tlmgr` or `latexmk` are faked. The integration tests in `test_integration.py` compile for real; they run only with `LATEX_FORGE_INTEGRATION=1` (`pytest -m integration`), and CI runs them on Linux, macOS and Windows after installing the light TinyTeX with `install.sh` / `install.ps1`.
 
 Run a single test file:
 
@@ -54,6 +54,10 @@ pytest tests/test_profile.py::test_latex_escape_handles_specials -v
 | `test_gallery_archive_install.py` | Gallery fast path and archive fallback |
 | `test_installed_templates.py` | `installed_templates.py` (metadata CRUD) |
 | `test_template_update.py` | `update_templates()` (version comparison) |
+| `test_toolchain.py`, `test_toolchain_more.py` | `toolchain.py` (TeX discovery, TinyTeX install, tlmgr, missing packages, system installers) |
+| `test_setup.py` | `setup.py` (`latex-forge setup` flows) |
+| `test_cli_commands.py` | `cli.py` (every subcommand, guided `create`) |
+| `test_integration.py` | Real compiles against an installed TeX distribution |
 
 ## Adding a new CLI command
 

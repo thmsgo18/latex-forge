@@ -41,12 +41,14 @@ if ($LASTEXITCODE -ne 0) { throw 'uv could not install latex-forge' }
 & $uv tool update-shell | Out-Null
 $lf = Join-Path $binDir 'latex-forge.exe'
 & $lf --version
+if ($LASTEXITCODE -ne 0) { throw "latex-forge was installed but does not run ($lf)" }
 
 # 3. LaTeX
 if ($tex -eq 'none') {
     Write-Host '==> Skipping LaTeX (LATEX_FORGE_TEX=none). Install it later with: latex-forge setup --install-tex'
 } else {
     & $lf setup --install-tex --tex $tex --yes --skip-extensions
+    if ($LASTEXITCODE -ne 0) { throw 'LaTeX could not be installed: see the messages above.' }
 }
 
 Write-Host ''

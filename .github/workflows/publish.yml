@@ -1,12 +1,38 @@
 name: Publish to PyPI
 
+# Push a vX.Y.Z tag to release. Nothing is published unless the changelog
+# documents the version and the whole CI suite — unit tests on every OS and
+# Python version, and the real install-and-compile integration tests — passes
+# on the tagged commit. After publishing, the release is installed from PyPI
+# on each OS to make sure users actually get it.
+
 on:
   push:
     tags:
       - "v*.*.*"
 
+permissions:
+  contents: read
+
 jobs:
+  release-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: CHANGELOG.md documents this version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! grep -q "^## \[$version\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$version]' section"
+            exit 1
+          fi
+
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: [release-checks, ci]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -24,10 +50,42 @@ jobs:
       - name: Build package
         run: pip install build && python -m build
 
+      - name: Built version matches the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ls dist
+          test -f "dist/latex_forge-$version.tar.gz" || { echo "::error::built version differs from $GITHUB_REF_NAME"; exit 1; }
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Create GitHub release
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on {print}' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md
         env:
           GH_TOKEN: ${{ github.token }}
+
+  verify:
+    needs: publish
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: astral-sh/setup-uv@v10
+
+      - name: Install the release from PyPI
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # PyPI can take a minute to serve a new release everywhere.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if uv tool install --managed-python --refresh "latex-forge==$version"; then break; fi
+            sleep 30
+          done
+          lf="$(uv tool dir --bin)/latex-forge"
+          "$lf" --version | grep -F "$version"
+          "$lf" setup --check-only --skip-extensions || true  # runs end to end; no LaTeX expected here

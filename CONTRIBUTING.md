@@ -20,17 +20,26 @@ pipx install --editable ".[dev]"
 ## Running the tests
 
 ```bash
-pytest tests/ -v
+pip install -e ".[dev]"
+pytest tests/ -v                        # unit tests (no LaTeX needed)
+pytest tests/ --cov=latex_forge         # with coverage (CI requires >= 85%)
+ruff check .                            # lint
+LATEX_FORGE_INTEGRATION=1 pytest -m integration   # compiles for real with your TeX distribution
 ```
 
-All tests must pass before submitting a pull request.
+All tests must pass before submitting a pull request. CI runs the unit tests
+on Linux, macOS and Windows with Python 3.10 to 3.14, and the integration
+tests on all three OSes after installing latex-forge and the light TinyTeX
+with `install.sh` / `install.ps1` — exactly what a new user does.
 
 ## Adding a template
 
 1. Create a new folder under `latex_forge/templates/your-template-name/`
 2. Add a `main.tex` and the required subfolders
 3. Make sure `latex-forge create --name test --template your-template-name` works
-4. Add tests if needed
+4. Add its TeX Live packages to `latex_forge/tex_packages.json` (generate them with the
+   gallery's `scripts/compute_tex_packages.py --path <created project>`): `tests/test_setup.py`
+   fails until you do, and the integration tests compile every built-in template on TinyTeX
 
 ## Submitting a pull request
 
@@ -43,9 +52,13 @@ All tests must pass before submitting a pull request.
 
 Maintainers only:
 
-1. Tag the release commit: `git tag vX.Y.Z`
-2. Push: `git push && git push --tags`
+1. Rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD` and commit
+2. Tag the release commit: `git tag vX.Y.Z`
+3. Push: `git push && git push --tags`
 
 The package version is derived from the git tag via `setuptools-scm` — no
-manual bump needed. GitHub Actions will publish to PyPI automatically, and the
-README version badge follows the latest tag.
+manual bump needed. The publish workflow refuses to release unless the
+changelog documents the version and the full CI suite (unit + integration)
+passes on the tagged commit; it then publishes to PyPI, creates the GitHub
+release with the changelog notes, and installs the release from PyPI on each
+OS to check it. The README version badge follows the latest tag.
