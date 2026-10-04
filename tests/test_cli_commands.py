@@ -343,3 +343,25 @@ def test_create_installs_template_packages_unless_skipped(monkeypatch, tmp_path)
     assert main(["create", "--name", "a", "--template", "research", "--repo", "none"]) == 0
     assert main(["create", "--name", "b", "--template", "research", "--repo", "none", "--skip-packages"]) == 0
     assert len(calls) == 1 and "biblatex" in calls[0]
+
+
+def test_symbols_degrade_to_ascii_on_legacy_consoles(tmp_path):
+    """A cp1252 console (Windows) can't encode ✓/✗/→: print OK/X/-> instead of crashing."""
+    import os
+    import subprocess
+    import sys
+
+    env = dict(os.environ, PYTHONIOENCODING="cp1252", HOME=str(tmp_path), USERPROFILE=str(tmp_path))
+    result = subprocess.run([sys.executable, "-m", "latex_forge.cli", "diagnose"],
+                            capture_output=True, env=env, cwd=Path(cli.__file__).parent.parent)
+    out = result.stdout.decode("cp1252")
+    assert result.returncode in (0, 1), result.stderr.decode("cp1252", "replace")
+    assert "OK latex-forge" in out
+    assert "=====" in out and "✓" not in out
+
+
+def test_ascii_fallback_handler():
+    with pytest.raises(UnicodeDecodeError):
+        cli._ascii_fallback(UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad"))
+    error = UnicodeEncodeError("cp1252", "a✓→€b", 1, 3, "unencodable")
+    assert cli._ascii_fallback(error) == ("OK->", 3)

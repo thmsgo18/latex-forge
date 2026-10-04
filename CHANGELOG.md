@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-04
+
 ### Added
 - **LaTeX without administrator rights**: `latex-forge setup --install-tex` now installs [TinyTeX](https://yihui.org/tinytex/) in your home folder (~500 MB, a few minutes) instead of a 5 GB system distribution, plus every package the built-in templates use, and compiles a test document to prove it works. `--tex {light,full,system}` picks the distribution: `full` is all of TeX Live (still no admin rights, also upgrades a light install), `system` is the previous MacTeX/MiKTeX/TeX Live install through the package manager. Without flags, `setup` asks. An existing distribution is never touched.
 - **One-line installers** for people who don't use VS Code: `install.sh` (macOS/Linux, `curl … | sh`) and `install.ps1` (Windows) install uv, the CLI on a uv-managed Python, and LaTeX — no Python, pipx or admin rights needed.
@@ -19,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - `latex-forge setup --install-tex` installs the light TinyTeX by default; use `--tex system` for the previous behaviour.
 - TeX tools are now found even when they aren't on PATH: the managed TinyTeX and the usual install locations (MacTeX's `/Library/TeX/texbin`, `/usr/local/texlive/<year>`, `C:\texlive\<year>`, MiKTeX) are searched too, so no more "restart VS Code / open a new terminal" after installing LaTeX.
+- Python 3.13 and 3.14 are supported and tested (3.14 is what uv installs for new users).
 - `diagnose` shows "LaTeX" instead of "TeX Live" (it can be MiKTeX) and suggests the right install command for your distribution (`tlmgr install`, `sudo tlmgr install`, `mpm --install`, or `latex-forge setup --install-tex`).
 
 ### Fixed
@@ -29,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - On Windows, `tlmgr` (a `.bat`) and `code` (a `.cmd`) are run by full path; running them by bare name failed.
 - `setup` finds VS Code's `code` command in its default install location when it isn't on PATH.
 - `template install --engine` no longer erases the other keys of an existing `latexforge.toml`.
+- On Windows consoles using a legacy code page (cp1252), `diagnose` and `template update` crashed with a `UnicodeEncodeError` on the ✓/✗/→ symbols; they now fall back to `OK`, `X` and `->`.
+- `~/.latex-forge.toml` is located when it's read, not when latex-forge starts.
 
 ## [0.7.0] - 2026-07-31
 

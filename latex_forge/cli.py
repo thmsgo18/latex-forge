@@ -195,6 +195,31 @@ def _ask_sharing() -> str:
     return "pdf-only" if answer.startswith("pdf") else "full"
 
 
+# Plain-ASCII stand-ins for the symbols latex-forge prints, for consoles whose
+# encoding lacks them (Windows' legacy code pages, e.g. cp1252).
+_ASCII_FALLBACKS = {"✓": "OK", "✗": "X", "→": "->", "═": "=", "·": "-"}
+
+
+def _ascii_fallback(error: UnicodeError):
+    """codecs error handler: replace unencodable symbols with ASCII look-alikes."""
+    if not isinstance(error, UnicodeEncodeError):
+        raise error
+    text = error.object[error.start:error.end]
+    return "".join(_ASCII_FALLBACKS.get(char, "?") for char in text), error.end
+
+
+def _degrade_symbols_gracefully() -> None:
+    """Never crash on a console that can't print ✓/✗/→: write OK/X/-> instead."""
+    import codecs
+
+    codecs.register_error("latex_forge_ascii", _ascii_fallback)
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="latex_forge_ascii")
+        except (AttributeError, ValueError):
+            pass  # not a TextIOWrapper (e.g. captured by a test harness)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argparse parser with all latex-forge subcommands."""
     parser = argparse.ArgumentParser(
@@ -539,13 +564,7 @@ def main(argv: list[str] | None = None) -> int:
     relevant modules are deferred to each branch to keep CLI startup fast.
     Returns the process exit code.
     """
-    # Windows consoles often use a legacy code page (cp1252) that can't encode
-    # the ✓/✗/→ symbols latex-forge prints: degrade them instead of crashing.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(errors="replace")
-        except (AttributeError, ValueError):
-            pass
+    _degrade_symbols_gracefully()
 
     parser = build_parser()
     argcomplete.autocomplete(parser)
