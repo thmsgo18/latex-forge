@@ -39,3 +39,9 @@ site/
 **/*.toc
 **/*.vrb
 projects/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
