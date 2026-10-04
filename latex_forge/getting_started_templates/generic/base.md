@@ -61,9 +61,9 @@ This renames the folder, the main `.tex` file, and any build artifacts.
 
 ## If compilation fails
 
-1. **LaTeX not installed** → run `latex-forge setup --install-tex`
+1. **LaTeX not installed** → run `latex-forge setup --install-tex` (no admin rights needed; without latex-forge: `scripts/setup.sh` or `scripts\setup.bat`)
 2. **LaTeX Workshop not installed** → install it from the VS Code extensions panel
-3. **Missing package** → `tlmgr install package-name` (TeX Live) or let MiKTeX auto-install
+3. **Missing package** → run `latex-forge build`: it installs missing packages and recompiles (otherwise `tlmgr install package-name`, or let MiKTeX auto-install)
 4. **Compilation stuck** → delete the `build/` folder and try again
 
 This project uses **@@ENGINE_DISPLAY@@**. Verify it is available:

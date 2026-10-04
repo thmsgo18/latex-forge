@@ -11,7 +11,10 @@ from latex_forge.diagnose import format_diagnose_text, run_diagnose
 
 def test_run_diagnose_returns_all_keys():
     data = run_diagnose()
-    expected_keys = {"latex_forge", "pipx", "texlive", "latexmk", "biber", "gh_cli", "profile", "default_template"}
+    expected_keys = {
+        "latex_forge", "cli_install", "pipx", "tex_distribution", "texlive", "latexmk",
+        "biber", "gh_cli", "profile", "default_template",
+    }
     assert expected_keys == set(data.keys())
 
 
@@ -45,7 +48,8 @@ def test_format_diagnose_text_contains_section_labels():
     data = run_diagnose()
     text = format_diagnose_text(data)
     assert "latex-forge" in text
-    assert "TeX Live" in text
+    assert "LaTeX" in text
+    assert "Installed with" in text
     assert "latexmk" in text
     assert "biber" in text
     assert "Profile" in text
@@ -75,7 +79,8 @@ def test_format_diagnose_text_shows_fail_icon_for_missing_tool(monkeypatch):
     monkeypatch.setattr(diag, "_check_texlive", lambda: {"ok": False, "version": None, "engines": []})
     data = run_diagnose()
     text = format_diagnose_text(data)
-    assert "✗ TeX Live" in text
+    assert "✗ LaTeX" in text
+    assert "latex-forge setup --install-tex" in text
 
 
 def test_format_diagnose_text_shows_ok_icon_when_tool_present(monkeypatch):
@@ -88,7 +93,7 @@ def test_format_diagnose_text_shows_ok_icon_when_tool_present(monkeypatch):
     )
     data = run_diagnose()
     text = format_diagnose_text(data)
-    assert "✓ TeX Live" in text
+    assert "✓ LaTeX" in text
     assert "2024" in text
 
 
@@ -144,3 +149,71 @@ def test_cli_diagnose_json_exits_1_when_texlive_missing(monkeypatch):
     from latex_forge.cli import main
     rc = main(["diagnose", "--json"])
     assert rc == 1
+
+
+# ── Install method & distribution ─────────────────────────────────────────
+
+
+def test_install_method_detects_uv(monkeypatch):
+    import latex_forge.diagnose as diag
+
+    monkeypatch.setattr(diag.sys, "prefix", "/Users/me/.local/share/uv/tools/latex-forge")
+    assert diag._install_method() == "uv"
+
+
+def test_install_method_detects_pipx(monkeypatch):
+    import latex_forge.diagnose as diag
+
+    monkeypatch.setattr(diag.sys, "prefix", "/Users/me/.local/pipx/venvs/latex-forge")
+    assert diag._install_method() == "pipx"
+
+
+def test_install_method_detects_pipx_windows(monkeypatch):
+    import latex_forge.diagnose as diag
+
+    monkeypatch.setattr(diag.sys, "prefix", r"C:\\Users\\me\\pipx\\venvs\\latex-forge")
+    assert diag._install_method() == "pipx"
+
+
+def test_cli_install_reports_python_version():
+    import latex_forge.diagnose as diag
+
+    info = diag._check_cli_install()
+    assert info["ok"] is True
+    assert info["python"].count(".") == 2
+
+
+def test_install_fix_depends_on_distribution(monkeypatch):
+    import latex_forge.diagnose as diag
+
+    def dist(**kw):
+        base = {"kind": "texlive", "can_install_packages": False}
+        base.update(kw)
+        return lambda: base
+
+    monkeypatch.setattr(diag.toolchain, "detect_distribution", dist(kind="none"))
+    assert diag._install_fix("latexmk") == "latex-forge setup --install-tex"
+    monkeypatch.setattr(diag.toolchain, "detect_distribution", dist(kind="tinytex", can_install_packages=True))
+    assert diag._install_fix("biber") == "tlmgr install biber"
+    monkeypatch.setattr(diag.toolchain, "detect_distribution", dist())
+    assert diag._install_fix("biber") == "sudo tlmgr install biber"
+    monkeypatch.setattr(diag.toolchain, "detect_distribution", dist(kind="miktex"))
+    assert diag._install_fix("latexmk") == "mpm --install=latexmk"
+
+
+def test_latexmk_without_perl_is_reported(monkeypatch):
+    """MiKTeX's latexmk exists but can't run without Perl."""
+    import latex_forge.diagnose as diag
+
+    monkeypatch.setattr(diag.toolchain, "which", lambda name: f"C:/MiKTeX/{name}.exe")
+    monkeypatch.setattr(diag, "_first_line",
+                        lambda *a: (1, "MiKTeX could not find the script engine 'perl.exe'"))
+    result = diag._check_latexmk()
+    assert result["ok"] is False
+    assert "Perl" in result["fix"]
+
+
+def test_tex_distribution_in_json_output():
+    data = run_diagnose()
+    dist = data["tex_distribution"]
+    assert {"kind", "label", "bin_dir", "managed", "can_install_packages"} <= set(dist)

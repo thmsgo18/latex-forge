@@ -116,45 +116,57 @@ def test_build_command_verbose_drops_quiet(project):
 # ── run_build behaviour ───────────────────────────────────────────────────
 
 
+_TINYTEX = {"kind": "tinytex", "label": "TinyTeX", "bin_dir": "/x", "root": "/x",
+            "tlmgr": "/x/tlmgr", "managed": True, "can_install_packages": True}
+_SYSTEM_TEXLIVE = dict(_TINYTEX, kind="texlive", managed=False, can_install_packages=False)
+
+
+def _result(code):
+    class R:
+        returncode = code
+        stdout = ""
+        stderr = ""
+
+    return R()
+
+
+@pytest.fixture()
+def tex(monkeypatch):
+    """Pretend a TinyTeX is installed: every tool resolves, tlmgr can install."""
+    monkeypatch.setattr("latex_forge.build.toolchain.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("latex_forge.build.toolchain.detect_distribution", lambda: dict(_TINYTEX))
+    return monkeypatch
+
+
 def test_run_build_missing_latexmk(project, monkeypatch, capsys):
-    monkeypatch.setattr("latex_forge.build.shutil.which", lambda _: None)
+    monkeypatch.setattr("latex_forge.build.toolchain.which", lambda _: None)
     assert run_build(project) == 1
     assert "latex-forge setup" in capsys.readouterr().out
 
 
-def test_run_build_invokes_latexmk(project, monkeypatch):
-    monkeypatch.setattr("latex_forge.build.shutil.which", lambda _: "/usr/bin/latexmk")
+def test_run_build_invokes_latexmk(project, tex):
     calls: dict = {}
 
-    def fake_run(command, cwd, check):
+    def fake_run(command, cwd, check, env):
         calls["command"] = command
         calls["cwd"] = cwd
+        calls["env"] = env
+        return _result(0)
 
-        class R:
-            returncode = 0
-
-        return R()
-
-    monkeypatch.setattr("latex_forge.build.subprocess.run", fake_run)
+    tex.setattr("latex_forge.build.subprocess.run", fake_run)
     assert run_build(project) == 0
+    assert calls["command"][0] == "/usr/bin/latexmk"  # resolved, not just "latexmk"
     assert calls["command"][-1] == "my-report.tex"
     assert calls["cwd"] == project.resolve()
+    assert "PATH" in calls["env"]
 
 
-def test_run_build_clean_removes_build_dir(project, monkeypatch):
+def test_run_build_clean_removes_build_dir(project, tex):
     build_dir = project / "build"
     build_dir.mkdir()
     (build_dir / "stale.aux").touch()
 
-    monkeypatch.setattr("latex_forge.build.shutil.which", lambda _: "/usr/bin/latexmk")
-
-    def fake_run(command, cwd, check):
-        class R:
-            returncode = 0
-
-        return R()
-
-    monkeypatch.setattr("latex_forge.build.subprocess.run", fake_run)
+    tex.setattr("latex_forge.build.subprocess.run", lambda command, cwd, check, env: _result(0))
     run_build(project, clean=True)
     assert not build_dir.exists()
 
@@ -164,16 +176,9 @@ def test_run_build_missing_directory():
         run_build(Path("/nonexistent/nowhere"))
 
 
-def test_run_build_propagates_exit_code(project, monkeypatch):
-    monkeypatch.setattr("latex_forge.build.shutil.which", lambda _: "/usr/bin/latexmk")
-
-    def fake_run(command, cwd, check):
-        class R:
-            returncode = 12
-
-        return R()
-
-    monkeypatch.setattr("latex_forge.build.subprocess.run", fake_run)
+def test_run_build_propagates_exit_code(project, tex):
+    tex.setattr("latex_forge.build.subprocess.run", lambda command, cwd, check, env: _result(12))
+    tex.setattr("latex_forge.build.toolchain.missing_helpers", lambda _: [])
     assert run_build(project) == 12
 
 
@@ -195,107 +200,159 @@ def test_find_missing_files_no_log(tmp_path):
     assert _find_missing_files(tmp_path / "nope.log") == []
 
 
-def test_tlmgr_package_for_file(monkeypatch):
-    def fake_run(command, capture_output, text, check):
-        class R:
-            returncode = 0
-            stdout = "tikz.sty:\n\tpgf:\n\t\ttexmf-dist/tex/generic/pgf/frontendlayer/tikz/tikz.sty\n"
+def test_tlmgr_package_for_file_uses_toolchain(monkeypatch):
+    seen = []
 
-        return R()
+    def fake_package_for(requirement):
+        seen.append(requirement)
+        return "pgf"
 
-    monkeypatch.setattr("latex_forge.build.subprocess.run", fake_run)
+    monkeypatch.setattr("latex_forge.build.toolchain.package_for", fake_package_for)
     assert _tlmgr_package_for_file("tikz.sty") == "pgf"
-
-
-def test_tlmgr_package_for_file_not_found(monkeypatch):
-    def fake_run(command, capture_output, text, check):
-        class R:
-            returncode = 1
-            stdout = ""
-
-        return R()
-
-    monkeypatch.setattr("latex_forge.build.subprocess.run", fake_run)
-    assert _tlmgr_package_for_file("doesnotexist.sty") is None
+    assert seen == [("file", "tikz.sty")]
 
 
 def test_install_missing_packages_no_tlmgr(monkeypatch):
-    monkeypatch.setattr("latex_forge.build.shutil.which", lambda _: None)
+    monkeypatch.setattr("latex_forge.build.toolchain.which", lambda _: None)
     assert _install_missing_packages(["tikz.sty"]) == []
 
 
 def test_install_missing_packages_installs(monkeypatch):
-    monkeypatch.setattr("latex_forge.build.shutil.which", lambda _: "/usr/bin/tlmgr")
-
-    def fake_run(command, capture_output, text, check):
-        class R:
-            returncode = 0
-            stdout = ""
-
-        if command[1] == "search":
-            R.stdout = "tikz.sty:\n\tpgf:\n\t\tsome/path/tikz.sty\n"
-        return R()
-
-    monkeypatch.setattr("latex_forge.build.subprocess.run", fake_run)
+    monkeypatch.setattr("latex_forge.build.toolchain.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("latex_forge.build.toolchain.package_for", lambda r: "pgf")
+    monkeypatch.setattr("latex_forge.build.toolchain.install_packages", lambda pkgs: list(pkgs))
     assert _install_missing_packages(["tikz.sty"]) == ["pgf"]
 
 
-def test_run_build_retries_after_installing_missing_package(project, monkeypatch, capsys):
-    monkeypatch.setattr("latex_forge.build.shutil.which", lambda name: f"/usr/bin/{name}")
-
+def _write_log(project: Path, text: str) -> None:
     log_path = project / "build" / "my-report.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.write_text("! LaTeX Error: File `tikz.sty' not found.\n", encoding="utf-8")
+    log_path.write_text(text, encoding="utf-8")
 
-    calls = {"latexmk": 0}
 
-    def fake_run(command, cwd=None, check=False, capture_output=False, text=False):
-        if command[0] == "latexmk":
-            calls["latexmk"] += 1
+def test_run_build_retries_after_installing_missing_package(project, tex, capsys):
+    _write_log(project, "! LaTeX Error: File `tikz.sty' not found.\n")
+    calls = {"latexmk": 0, "installed": []}
 
-            class R:
-                returncode = 1
+    def fake_run(command, cwd, check, env):
+        calls["latexmk"] += 1
+        return _result(1)
 
-            return R()
-        if command[:2] == ["tlmgr", "search"]:
-            class R:
-                returncode = 0
-                stdout = "tikz.sty:\n\tpgf:\n\t\tsome/path/tikz.sty\n"
+    def fake_install(packages):
+        calls["installed"].append(list(packages))
+        return list(packages)
 
-            return R()
-        if command[:2] == ["tlmgr", "install"]:
-            class R:
-                returncode = 0
-                stdout = ""
-
-            return R()
-        raise AssertionError(f"Unexpected command: {command}")
-
-    monkeypatch.setattr("latex_forge.build.subprocess.run", fake_run)
+    tex.setattr("latex_forge.build.subprocess.run", fake_run)
+    tex.setattr("latex_forge.build.toolchain.package_for", lambda r: "pgf" if r == ("file", "tikz.sty") else None)
+    tex.setattr("latex_forge.build.toolchain.install_packages", fake_install)
     result = run_build(project)
 
     assert result == 1
+    # One retry after installing pgf; the log still says tikz.sty is missing,
+    # but pgf was already tried, so the loop stops instead of spinning.
     assert calls["latexmk"] == 2
+    assert calls["installed"] == [["pgf"]]
     out = capsys.readouterr().out
     assert "Missing package files: tikz.sty" in out
     assert "Installed: pgf" in out
 
 
-def test_run_build_no_retry_without_missing_packages(project, monkeypatch, capsys):
-    monkeypatch.setattr("latex_forge.build.shutil.which", lambda name: f"/usr/bin/{name}")
+def test_run_build_keeps_installing_until_it_compiles(project, tex, capsys):
+    """LaTeX stops at the first missing file, so several rounds may be needed."""
+    logs = iter([
+        "! LaTeX Error: File `tikz.sty' not found.\n",
+        "! LaTeX Error: File `siunitx.sty' not found.\n",
+    ])
+    _write_log(project, next(logs))
+    codes = iter([1, 1, 0])
 
+    def fake_run(command, cwd, check, env):
+        code = next(codes)
+        if code == 1 and calls["latexmk"] == 1:
+            _write_log(project, next(logs))
+        calls["latexmk"] += 1
+        calls["commands"].append(command)
+        return _result(code)
+
+    calls = {"latexmk": 0, "commands": []}
+    mapping = {("file", "tikz.sty"): "pgf", ("file", "siunitx.sty"): "siunitx"}
+    tex.setattr("latex_forge.build.subprocess.run", fake_run)
+    tex.setattr("latex_forge.build.toolchain.package_for", lambda r: mapping.get(r))
+    tex.setattr("latex_forge.build.toolchain.install_packages", lambda pkgs: list(pkgs))
+    assert run_build(project) == 0
+    assert calls["latexmk"] == 3
+    # Retries force latexmk to rerun: otherwise it says "Nothing to do".
+    assert "-g" not in calls["commands"][0]
+    assert all("-g" in c for c in calls["commands"][1:])
+    out = capsys.readouterr().out
+    assert "Installed: pgf" in out and "Installed: siunitx" in out
+    assert "PDF ready" in out
+
+
+def test_run_build_installs_missing_font(project, tex, capsys):
+    _write_log(project, '! Package fontspec Error: The font "Fira Mono" cannot be found.\n')
+    codes = iter([1, 0])
+    tex.setattr("latex_forge.build.subprocess.run", lambda command, cwd, check, env: _result(next(codes)))
+    tex.setattr("latex_forge.build.toolchain.package_for",
+                lambda r: "fira" if r == ("font", "Fira Mono") else None)
+    tex.setattr("latex_forge.build.toolchain.install_packages", lambda pkgs: list(pkgs))
+    assert run_build(project) == 0
+    assert 'font "Fira Mono"' in capsys.readouterr().out
+
+
+def test_run_build_system_texlive_prints_sudo_hint(project, tex, capsys):
+    """A root-owned TeX Live can't be changed by us: show the exact command."""
+    _write_log(project, "! LaTeX Error: File `tikz.sty' not found.\n")
+    tex.setattr("latex_forge.build.toolchain.detect_distribution", lambda: dict(_SYSTEM_TEXLIVE))
+    tex.setattr("latex_forge.build.subprocess.run", lambda command, cwd, check, env: _result(1))
+    tex.setattr("latex_forge.build.toolchain.package_for", lambda r: "pgf")
+
+    def no_install(_):
+        raise AssertionError("must not try to install without rights")
+
+    tex.setattr("latex_forge.build.toolchain.install_packages", no_install)
+    assert run_build(project) == 1
+    assert "sudo tlmgr install pgf" in capsys.readouterr().out
+
+
+def test_run_build_miktex_does_not_retry(project, tex):
+    """MiKTeX installs missing packages on its own during the compile."""
     calls = {"latexmk": 0}
 
-    def fake_run(command, cwd=None, check=False, capture_output=False, text=False):
+    def fake_run(command, cwd, check, env):
         calls["latexmk"] += 1
+        return _result(1)
 
-        class R:
-            returncode = 1
+    _write_log(project, "! LaTeX Error: File `tikz.sty' not found.\n")
+    tex.setattr("latex_forge.build.toolchain.detect_distribution",
+                lambda: dict(_TINYTEX, kind="miktex"))
+    tex.setattr("latex_forge.build.subprocess.run", fake_run)
+    assert run_build(project) == 1
+    assert calls["latexmk"] == 1
 
-        return R()
 
-    monkeypatch.setattr("latex_forge.build.subprocess.run", fake_run)
+def test_run_build_no_retry_without_missing_packages(project, tex):
+    calls = {"latexmk": 0}
+
+    def fake_run(command, cwd, check, env):
+        calls["latexmk"] += 1
+        return _result(1)
+
+    tex.setattr("latex_forge.build.subprocess.run", fake_run)
+    tex.setattr("latex_forge.build.toolchain.missing_helpers", lambda _: [])
     result = run_build(project)
 
     assert result == 1
     assert calls["latexmk"] == 1
+
+
+def test_watch_preinstalls_packages_from_sources(project, tex):
+    (project / "my-report.tex").write_text(
+        "\\documentclass{article}\n\\usepackage{tikz}\n", encoding="utf-8")
+    installed = []
+    tex.setattr("latex_forge.build.toolchain.unresolved_files", lambda names: [n for n in names if n == "tikz.sty"])
+    tex.setattr("latex_forge.build.toolchain.package_for", lambda r: "pgf" if r == ("file", "tikz.sty") else None)
+    tex.setattr("latex_forge.build.toolchain.install_packages", lambda pkgs: installed.extend(pkgs) or list(pkgs))
+    tex.setattr("latex_forge.build.subprocess.run", lambda command, cwd, check, env: _result(0))
+    run_build(project, watch=True)
+    assert installed == ["pgf"]

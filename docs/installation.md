@@ -1,47 +1,66 @@
 # Installation
 
-## Prerequisites
+LaTeX Forge needs two things: the `latex-forge` command and a LaTeX distribution. Neither requires administrator rights, and you don't need Python installed beforehand.
 
-| Requirement | Version | Notes |
-|---|---|---|
-| Python | 3.10+ | |
-| pipx | any | Recommended installer for CLI tools |
-| TeX Live | 2022+ | Or MiKTeX on Windows |
-| latexmk | any | Included in TeX Live full |
+## One-line install (recommended)
 
-### Install TeX Live
-
-=== "macOS"
+=== "macOS / Linux"
 
     ```bash
-    brew install --cask mactex
+    curl -LsSf https://raw.githubusercontent.com/thmsgo18/latex-forge/main/install.sh | sh
     ```
 
-=== "Debian / Ubuntu"
+=== "Windows (PowerShell)"
 
-    ```bash
-    sudo apt-get install texlive-full latexmk
+    ```powershell
+    powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/thmsgo18/latex-forge/main/install.ps1 | iex"
     ```
 
-=== "Windows"
+=== "VS Code"
 
-    Download the installer from [tug.org/texlive](https://tug.org/texlive/) and run it. MiKTeX is also supported.
+    Install the [LaTeX Forge extension](https://marketplace.visualstudio.com/items?itemName=thmsgo18.latex-forge-vscode) and click **Set Up Now** (or run **LaTeX Forge: Install Everything**).
 
-=== "All platforms"
+The installer:
 
-    Use the official TeX Live installer from [tug.org/texlive](https://tug.org/texlive/). This gives you the most up-to-date packages.
+1. installs [uv](https://docs.astral.sh/uv/) if it's missing — a single binary that installs Python tools and downloads a private Python for them;
+2. installs `latex-forge` with `uv tool install`, on that uv-managed Python (so an OS or Homebrew Python upgrade can never break it);
+3. runs `latex-forge setup`, which installs LaTeX — you choose the distribution — and compiles a test document to prove it works.
 
-### Install pipx
+Set `LATEX_FORGE_TEX=light|full|system|none` to skip the distribution question.
+
+## Choosing a LaTeX distribution
+
+| `--tex` | What you get | Size | Admin rights |
+|---|---|---|---|
+| `light` (default) | [TinyTeX](https://yihui.org/tinytex/) in your home folder, plus everything the built-in templates use. Any other package a document needs is installed automatically the first time it's compiled | ~500 MB, a few minutes | No |
+| `full` | TinyTeX with all of TeX Live (scheme-full), everything available offline | ~2 GB download | No |
+| `system` | MacTeX (Homebrew), MiKTeX + Strawberry Perl (winget) or TeX Live (apt/dnf/pacman) | 5+ GB, 20–30 min | Yes |
 
 ```bash
-pip install --user pipx
-pipx ensurepath
+latex-forge setup --install-tex            # light
+latex-forge setup --tex full               # all of TeX Live (also upgrades a light install)
+latex-forge setup --tex system             # through your package manager (asks for your password)
 ```
 
-## Install latex-forge
+TinyTeX goes where its own installer would put it: `~/Library/TinyTeX` (macOS), `~/.TinyTeX` (Linux), `%APPDATA%\TinyTeX` (Windows); set `TINYTEX_DIR` to choose its parent folder. Its programs are linked into `~/.local/bin` (added to your shell's PATH unless you pass `--no-modify-path`), and latex-forge finds them even before you open a new terminal.
+
+A distribution that's already installed (MacTeX, TeX Live, MiKTeX, a TinyTeX from R/Quarto…) is detected — even when it isn't on your PATH yet — and never modified.
+
+Maintenance:
 
 ```bash
-pipx install latex-forge
+latex-forge setup --verify          # compile a test document
+latex-forge setup --reinstall-tex   # after a new TeX Live year: reinstall, keeping your packages
+latex-forge setup --remove-tex      # uninstall the TinyTeX managed by latex-forge
+```
+
+## Install by hand
+
+If you already use uv or pipx:
+
+```bash
+uv tool install latex-forge      # or: pipx install latex-forge  (Python 3.10+)
+latex-forge setup
 ```
 
 Verify:
@@ -101,15 +120,16 @@ latex-forge diagnose
 Expected output:
 
 ```
-LaTeX Forge - Environment Diagnostics
+LaTeX Forge — Environment Diagnostics
 ══════════════════════════════════════
-✓ latex-forge         0.5.0
-✓ pipx                1.5.0
-✓ TeX Live            2024  (pdflatex, lualatex, xelatex)
-✓ latexmk             4.88
-✓ biber               2.20
-✗ Profile             not set  →  run: latex-forge profile set
-✗ Default template    not configured
+✓ latex-forge          0.8.0
+✓ Installed with       uv  (Python 3.14.8)
+✓ LaTeX                TinyTeX  (pdflatex, lualatex, xelatex)
+✓ latexmk              Latexmk, John Collins, 9 March 2026. Version 4.88
+✓ biber                biber version: 2.21
+✓ GitHub CLI           gh version 2.96.0 (2026-07-02)
+✗ Profile              not set  →  run: latex-forge profile set
+✗ Default template     not configured
 ```
 
 The two optional items (Profile and Default template) can be set later and are not required to compile documents.

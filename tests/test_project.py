@@ -461,3 +461,80 @@ def test_rename_renames_build_artifacts(tmp_path, monkeypatch):
 
     assert (tmp_path / "new-name" / "build" / "new-name.pdf").exists()
     assert (tmp_path / "new-name" / "build" / "new-name.log").exists()
+
+
+# ---------------------------------------------------------------------------
+# Setup scripts & LaTeX packages
+# ---------------------------------------------------------------------------
+
+def test_create_project_ships_standalone_toolchain(tmp_path, monkeypatch):
+    from latex_forge import toolchain
+
+    monkeypatch.chdir(tmp_path)
+    target_dir, _ = create_project("my-project", "blank")
+    scripts = target_dir / "scripts"
+    for name in ("setup.py", "setup.sh", "setup.bat", "toolchain.py"):
+        assert (scripts / name).exists(), name
+    assert (scripts / "toolchain.py").read_text(encoding="utf-8") == \
+        open(toolchain.__file__, encoding="utf-8").read()
+
+
+def test_project_setup_script_runs_without_latex_forge(tmp_path, monkeypatch):
+    """`python -I` hides latex_forge: the script must work on its own copy."""
+    import sys
+
+    monkeypatch.chdir(tmp_path)
+    target_dir, _ = create_project("my-project", "blank")
+    result = subprocess.run(
+        [sys.executable, "-I", str(target_dir / "scripts" / "setup.py"), "--check-only", "--skip-extensions"],
+        capture_output=True, text=True, cwd=tmp_path,
+    )
+    assert result.returncode in (0, 1), result.stderr
+    assert "Checking LaTeX tools" in result.stdout
+    help_text = subprocess.run(
+        [sys.executable, "-I", str(target_dir / "scripts" / "setup.py"), "--help"],
+        capture_output=True, text=True,
+    ).stdout
+    assert "--tex" in help_text and "--install-tex" in help_text
+
+
+def test_create_project_installs_declared_packages(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+
+    def fake_ensure(project_dir, main_file=None, engine="lualatex", declared=None, out=print, max_rounds=12):
+        seen.update(project_dir=project_dir, main_file=main_file, engine=engine, declared=declared)
+        return True
+
+    monkeypatch.setattr("latex_forge.toolchain.ensure_project_packages", fake_ensure)
+    target_dir, main_tex = create_project("my-cv", "cv-en", install_packages=True)
+    assert seen["project_dir"] == target_dir
+    assert seen["main_file"] == main_tex.name
+    assert seen["engine"] == "lualatex"
+    assert "fontspec" in seen["declared"] and "fira" in seen["declared"]
+
+
+def test_create_project_does_not_install_packages_by_default(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("latex_forge.toolchain.ensure_project_packages",
+                        lambda *a, **k: pytest.fail("not requested"))
+    create_project("my-project", "blank")
+
+
+def test_read_template_tex_packages_from_latexforge_toml(tmp_path):
+    from latex_forge.project import _read_template_tex_packages
+
+    (tmp_path / "latexforge.toml").write_text(
+        'engine = "xelatex"\n\n# generated\ntex_packages = [\n  "fontspec", "xetex",\n  "pgf",\n]\n',
+        encoding="utf-8",
+    )
+    assert _read_template_tex_packages(tmp_path, "gallery-thing") == ["fontspec", "xetex", "pgf"]
+    (tmp_path / "latexforge.toml").write_text('engine = "xelatex"\n', encoding="utf-8")
+    assert _read_template_tex_packages(tmp_path, "gallery-thing") is None
+
+
+def test_read_template_tex_packages_builtin():
+    from latex_forge.project import _read_template_tex_packages
+
+    packages = _read_template_tex_packages(templates_dir() / "research", "research")
+    assert "biblatex" in packages and "biber" in packages

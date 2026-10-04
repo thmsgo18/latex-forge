@@ -357,6 +357,26 @@ def _read_template_engine(source_dir: Path) -> str:
     return "lualatex"
 
 
+def _read_template_tex_packages(source_dir: Path, template: str) -> list[str] | None:
+    """Return the TeX Live packages a template declares it needs, if known.
+
+    Built-in templates are listed in the bundled ``tex_packages.json``;
+    installed (gallery) templates may carry a ``tex_packages`` array in their
+    ``latexforge.toml``. ``None`` means "unknown" — latex-forge then works it
+    out from the sources and a test compile instead.
+    """
+    if source_dir.parent == templates_dir():
+        try:
+            data = json.loads((package_dir() / "tex_packages.json").read_text(encoding="utf-8"))
+            packages = data["templates"].get(template)
+            return list(packages) if packages else None
+        except (OSError, ValueError, KeyError):
+            return None
+
+    from .toolchain import read_tex_packages
+    return read_tex_packages(source_dir / "latexforge.toml")
+
+
 def should_ignore(path: Path) -> bool:
     """Return True if *path* is an OS file or LaTeX build artifact that shouldn't be copied."""
     if path.name in IGNORED_NAMES:
@@ -582,13 +602,15 @@ def write_project_gitignore(target_dir: Path, sharing: str = "full") -> None:
 
 
 def write_project_setup_scripts(target_dir: Path) -> None:
-    """Write standalone scripts/setup.{py,sh,bat} into the new project.
+    """Write standalone scripts/setup.{py,sh,bat} (+ toolchain.py) into the new project.
 
-    These scripts are copied verbatim from ``scripts_templates/`` and are a
-    self-contained re-implementation of the checks in ``latex_forge/setup.py``,
-    so a project can be set up on a machine that doesn't have latex-forge
-    installed (e.g. after cloning it from GitHub) by running
-    ``scripts/setup.sh`` / ``scripts/setup.bat`` directly.
+    ``setup.py``/``.sh``/``.bat`` are copied verbatim from ``scripts_templates/``;
+    ``toolchain.py`` is a copy of :mod:`latex_forge.toolchain`, which is
+    standard-library only on purpose. Together they let a project be set up
+    on a machine that doesn't have latex-forge installed (e.g. after cloning
+    it from GitHub) by running ``scripts/setup.sh`` / ``scripts/setup.bat``:
+    LaTeX gets installed (no admin rights needed) along with the packages
+    this project uses.
     """
     scripts_dir = target_dir / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
@@ -596,6 +618,7 @@ def write_project_setup_scripts(target_dir: Path) -> None:
     templates_dir = package_dir() / "scripts_templates"
     for filename in ("setup.py", "setup.sh", "setup.bat"):
         (scripts_dir / filename).write_text(_read_fragment(templates_dir, filename), encoding="utf-8")
+    shutil.copy2(package_dir() / "toolchain.py", scripts_dir / "toolchain.py")
 
     (scripts_dir / "setup.py").chmod(0o755)
     (scripts_dir / "setup.sh").chmod(0o755)
@@ -637,6 +660,7 @@ def create_project(
     visibility: str = "private",
     sharing: str = "full",
     build_before_commit: bool = False,
+    install_packages: bool = False,
 ) -> tuple[Path, Path]:
     """Scaffold a new project named *name* from *template* under *output_dir*.
 
@@ -661,6 +685,12 @@ def create_project(
     *build_before_commit* is set, the project is built once before the
     initial commit so the PDF is included right away instead of only
     appearing after the user's first manual build.
+
+    With *install_packages*, the LaTeX packages the template needs are
+    installed when the distribution allows it without admin rights (a
+    lightweight TinyTeX) — see :func:`toolchain.ensure_project_packages`.
+    This never fails the creation: worst case, missing packages are
+    installed on the first ``latex-forge build``.
 
     Returns ``(target_dir, main_tex_file)``.
     """
@@ -725,6 +755,15 @@ def create_project(
 
         from .profile import apply_profile_to_project, load_profile
         apply_profile_to_project(target_dir, template, load_profile())
+
+        if install_packages:
+            from .toolchain import ensure_project_packages
+            ensure_project_packages(
+                target_dir,
+                main_tex_file.name,
+                engine,
+                declared=_read_template_tex_packages(source_dir, template),
+            )
 
         if repo_mode == "create":
             if build_before_commit:

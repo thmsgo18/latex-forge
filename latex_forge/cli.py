@@ -273,6 +273,14 @@ def build_parser() -> argparse.ArgumentParser:
             "manual build."
         ),
     )
+    create_parser.add_argument(
+        "--skip-packages",
+        action="store_true",
+        help=(
+            "Don't install the LaTeX packages the template needs (only relevant with a "
+            "lightweight TinyTeX distribution; useful offline)."
+        ),
+    )
 
     build_subparser = subparsers.add_parser(
         "build",
@@ -339,12 +347,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     setup_parser = subparsers.add_parser(
         "setup",
-        help="Install VS Code extensions when possible and check LaTeX prerequisites.",
+        help="Install LaTeX (no admin rights needed) and the recommended VS Code extensions.",
     )
     setup_parser.add_argument(
         "--check-only",
         action="store_true",
-        help="Only check the current environment without installing VS Code extensions.",
+        help="Only check the current environment without installing anything.",
     )
     setup_parser.add_argument(
         "--skip-extensions",
@@ -354,7 +362,47 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument(
         "--install-tex",
         action="store_true",
-        help="Try to install a LaTeX distribution with a common package manager for the current OS.",
+        help=(
+            "Install a LaTeX distribution if none is found — the light one by default "
+            "(see --tex). An existing distribution is never touched."
+        ),
+    )
+    setup_parser.add_argument(
+        "--tex",
+        choices=("light", "full", "system"),
+        default=None,
+        help=(
+            "Which distribution to install (implies --install-tex): 'light' = TinyTeX in your "
+            "home folder, ~500 MB, packages added on demand (default); 'full' = all of TeX Live "
+            "in your home folder, ~2 GB, works offline (also upgrades a light install); "
+            "'system' = MacTeX/MiKTeX/TeX Live via your package manager (needs an admin password)."
+        ),
+    )
+    setup_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Don't ask questions: install the light distribution if LaTeX is missing.",
+    )
+    setup_parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Compile a test document to prove the toolchain works (done automatically after an install).",
+    )
+    setup_parser.add_argument(
+        "--no-modify-path",
+        action="store_true",
+        help="Don't add ~/.local/bin to your shell startup files / PATH.",
+    )
+    setup_parser.add_argument(
+        "--reinstall-tex",
+        action="store_true",
+        help="Reinstall the TinyTeX managed by latex-forge (e.g. after a new TeX Live year), keeping its packages.",
+    )
+    setup_parser.add_argument(
+        "--remove-tex",
+        action="store_true",
+        help="Uninstall the TinyTeX managed by latex-forge.",
     )
     setup_parser.add_argument(
         "--install-gh",
@@ -833,6 +881,7 @@ def main(argv: list[str] | None = None) -> int:
                 visibility=visibility or "private",
                 sharing=sharing,
                 build_before_commit=args.build_before_commit,
+                install_packages=not args.skip_packages,
             )
         except (ValueError, FileExistsError) as exc:
             print(str(exc), file=sys.stderr)
@@ -925,8 +974,14 @@ def main(argv: list[str] | None = None) -> int:
         return run_setup(
             check_only=args.check_only,
             skip_extensions=args.skip_extensions,
-            install_tex=args.install_tex,
+            install_tex_requested=args.install_tex,
             install_gh=args.install_gh,
+            tex=args.tex,
+            assume_yes=args.yes,
+            modify_path=not args.no_modify_path,
+            verify=args.verify,
+            reinstall_tex=args.reinstall_tex,
+            remove_tex=args.remove_tex,
         )
 
     parser.print_help()

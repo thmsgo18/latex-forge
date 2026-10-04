@@ -180,3 +180,17 @@ def test_available_templates_without_user_dir():
     assert "blank" in templates
     assert "project-report-fr" in templates
     assert "cv-en" in templates
+
+
+def test_install_with_engine_keeps_other_latexforge_toml_keys(tmp_path):
+    """--engine must not wipe a gallery template's tex_packages list."""
+    from latex_forge.template_manager import _write_engine
+
+    toml = tmp_path / "latexforge.toml"
+    toml.write_text('engine = "lualatex"\n\ntex_packages = [\n  "pgf",\n]\n', encoding="utf-8")
+    _write_engine(toml, "xelatex")
+    assert toml.read_text(encoding="utf-8") == 'engine = "xelatex"\n\ntex_packages = [\n  "pgf",\n]\n'
+
+    toml.write_text('tex_packages = ["pgf"]\n', encoding="utf-8")
+    _write_engine(toml, "pdflatex")
+    assert toml.read_text(encoding="utf-8") == 'engine = "pdflatex"\ntex_packages = ["pgf"]\n'

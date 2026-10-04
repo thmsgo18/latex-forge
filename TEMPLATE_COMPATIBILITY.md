@@ -46,7 +46,25 @@ at install time instead:
 latex-forge template install <source> --engine xelatex
 ```
 
-This writes `latexforge.toml` for you in the installed copy.
+This writes `latexforge.toml` for you in the installed copy (any other keys
+already in the file are kept).
+
+### Optional: the LaTeX packages the template needs
+
+`latexforge.toml` can also list the TeX Live packages the template uses:
+
+```toml
+tex_packages = ["fontspec", "pgf", "tcolorbox", "xetex"]
+```
+
+With a lightweight TinyTeX (the default `latex-forge setup`), `latex-forge
+create` then installs the missing ones in one go, so the first compile works
+right away. Without the list, latex-forge finds them from the template's
+`\usepackage` lines and a test compile — slower, and it can miss packages a
+class loads only if they exist. Generate the list from a real compile on a
+full TeX Live with the gallery's
+[`compute_tex_packages.py`](https://github.com/thmsgo18/latex-forge-gallery/blob/main/scripts/compute_tex_packages.py)
+(`--path <template-dir> --write`) rather than writing it by hand.
 
 ## 3. Profile placeholders
 

@@ -14,13 +14,14 @@ flowchart TD
     F["Copy logo assets\nto assets/logos/"]
     G["Write .vscode/settings.json\n(engine flag, LaTeX Workshop recipe)"]
     H["Write .gitignore"]
-    I["Write scripts/setup.sh,bat,py"]
+    I["Write scripts/setup.sh,bat,py\n+ toolchain.py"]
     J["Write GETTING_STARTED.md"]
     K["Write AGENTS.md\n(assembled from fragments)"]
     L["apply_profile_to_project()\n(no-op if no profile)"]
-    M["git init + initial commit\n(only with --git)"]
+    P["ensure_project_packages()\n(user-writable TeX only)"]
+    M["git init + commit + gh repo create\n(only with --repo create)"]
 
-    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K --> L --> M
+    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K --> L --> P --> M
 ```
 
 ## Name validation

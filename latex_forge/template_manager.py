@@ -10,6 +10,7 @@ published to the gallery.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 import urllib.error
@@ -120,7 +121,7 @@ def install_template(
             )
 
     if engine is not None:
-        (path / "latexforge.toml").write_text(f'engine = "{engine}"\n', encoding="utf-8")
+        _write_engine(path / "latexforge.toml", engine)
 
     # Persist metadata (version from gallery if available)
     _record_installation(template_name, source)
@@ -331,6 +332,23 @@ def _user_template_path(name: str) -> Path:
 
 
 # ── Metadata persistence ──────────────────────────────────────────────────
+
+
+def _write_engine(toml_path: Path, engine: str) -> None:
+    """Set ``engine`` in a template's latexforge.toml, keeping its other keys.
+
+    Gallery templates can carry more than the engine (e.g. their
+    ``tex_packages`` list), so the file is edited rather than overwritten.
+    """
+    line = f'engine = "{engine}"'
+    if not toml_path.exists():
+        toml_path.write_text(line + "\n", encoding="utf-8")
+        return
+    text = toml_path.read_text(encoding="utf-8")
+    updated, count = re.subn(r'(?m)^engine[ \t]*=[ \t]*["\'][^"\'\n]*["\'][ \t]*$', line, text)
+    if count == 0:
+        updated = line + "\n" + text
+    toml_path.write_text(updated, encoding="utf-8")
 
 
 def _record_installation(name: str, source: str) -> None:

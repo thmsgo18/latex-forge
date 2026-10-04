@@ -11,14 +11,16 @@ latex_forge/
   config.py            # ~/.latex-forge.toml user preferences
   template_manager.py  # Install, update and remove user-installed templates
   installed_templates.py  # Persistence layer for installed template metadata
-  diagnose.py          # Environment checks (TeX Live, latexmk, biber, profile)
+  diagnose.py          # Environment checks (distribution, latexmk, biber, install method, profile)
   export.py            # ZIP export for submission
-  setup.py             # First-run checks and VS Code extension installation
+  setup.py             # `setup` command and first-run check (wires toolchain.py to the CLI)
+  toolchain.py         # Find/install TeX (TinyTeX, system), tlmgr, missing packages — stdlib-only
+  tex_packages.json    # TeX Live packages each built-in template needs
   templates/           # Built-in template files
   styles/packages/     # Local .sty files distributed with the built-in templates
   agents_templates/    # AGENTS.md fragment files assembled at project creation
   getting_started_templates/  # GETTING_STARTED.md fragment files
-  scripts_templates/   # Platform-specific setup scripts (setup.sh/bat/py)
+  scripts_templates/   # Project setup scripts (setup.sh/bat/py); toolchain.py is copied next to them
   assets/              # Logo and image assets copied into new projects
 ```
 

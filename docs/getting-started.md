@@ -76,7 +76,7 @@ latex-forge build
 
 The PDF is written to `build/my-report.pdf`.
 
-On first compile, `latexmk` may detect missing TeX Live packages and install them automatically via `tlmgr`. If auto-install fails (offline or restricted environment), the error message tells you which package to install manually.
+If the document needs a LaTeX package your distribution doesn't have yet (common with the light TinyTeX), `latex-forge build` installs it with `tlmgr` and recompiles. In VS Code, the extension does the same when LaTeX Workshop's compile reports a missing package. Offline, or with a system-wide TeX Live you can't modify, the message tells you which package to install.
 
 ## 5. Watch mode
 

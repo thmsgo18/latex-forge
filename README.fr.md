@@ -42,29 +42,45 @@ LaTeX Forge est un petit outil que vous installez une fois. Une commande crée e
 ## Démarrage rapide
 
 ```bash
-# 1. installer (une seule fois)
-pipx install latex-forge
+# 1. installer latex-forge et LaTeX (une seule fois — sans droits admin, sans Python)
+curl -LsSf https://raw.githubusercontent.com/thmsgo18/latex-forge/main/install.sh | sh
 
-# 2. vérifier votre machine et installer ce qui manque (LaTeX, extensions VS Code)
-latex-forge setup
-
-# 3. créer votre premier projet
+# 2. créer votre premier projet
 latex-forge create --name mon-rapport --template project-report-fr
 
-# 4. l'ouvrir et commencer à écrire
+# 3. l'ouvrir et commencer à écrire
 code mon-rapport
 ```
 
+Sous **Windows**, l'étape 1 est (dans PowerShell) :
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/thmsgo18/latex-forge/main/install.ps1 | iex"
+```
+
+> Vous utilisez VS Code ? Installez plutôt l'[extension LaTeX Forge](https://marketplace.visualstudio.com/items?itemName=thmsgo18.latex-forge-vscode) : elle installe tout en un clic.
+
+L'installateur récupère [uv](https://docs.astral.sh/uv/) (qui apporte son propre Python), installe la commande `latex-forge` avec, puis vous demande quelle distribution LaTeX vous voulez et vérifie qu'un document de test compile.
+
 <details>
-<summary><i>C'est quoi pipx ? (cliquez si l'étape 1 échoue)</i></summary>
+<summary><i>Quelle distribution LaTeX ? (légère, complète, système)</i></summary>
 
-`pipx` installe proprement les outils Python en ligne de commande. S'il manque :
+| | Ce que vous obtenez | Taille | Droits admin |
+|---|---|---|---|
+| **Légère** (par défaut) | [TinyTeX](https://yihui.org/tinytex/) dans votre dossier personnel. Les paquets LaTeX dont un document a besoin s'installent tout seuls à la première compilation | ~500 Mo, quelques minutes | Non |
+| **Complète** | Tout TeX Live dans votre dossier personnel, tout disponible hors ligne | ~2 Go à télécharger | Non |
+| **Système** | MacTeX (Homebrew), MiKTeX (winget) ou TeX Live (apt/dnf/pacman) | 5+ Go, 20–30 min | Oui |
 
-- **macOS** : `brew install pipx && pipx ensurepath`
-- **Windows** : `py -m pip install --user pipx && py -m pipx ensurepath`
-- **Linux** : `sudo apt install pipx && pipx ensurepath` (ou voir [pipx.pypa.io](https://pipx.pypa.io))
+Une distribution LaTeX déjà installée (MacTeX, TeX Live, MiKTeX…) est détectée et n'est jamais modifiée. Vous changez d'avis plus tard ? `latex-forge setup --tex full` (complète une installation légère), ou `latex-forge setup --remove-tex` pour désinstaller la légère/complète.
+</details>
 
-Ouvrez ensuite un nouveau terminal et relancez l'étape 1. Python 3.10+ est requis.
+<details>
+<summary><i>Vous utilisez déjà uv ou pipx ? Installation manuelle</i></summary>
+
+```bash
+uv tool install latex-forge      # ou : pipx install latex-forge  (Python 3.10+)
+latex-forge setup                # installe LaTeX (vous demande lequel) et vérifie qu'il fonctionne
+```
 </details>
 
 ## Fonctionnalités
@@ -74,9 +90,9 @@ Ouvrez ensuite un nouveau terminal et relancez l'étape 1. Python 3.10+ est requ
 - **Compilation en terminal** : `latex-forge build` et `latex-forge watch` fonctionnent sans aucun éditeur, et installent automatiquement les paquets manquants
 - **Plus de 80 templates** : CV, thèses, articles, posters, présentations… installables depuis la [galerie](https://github.com/thmsgo18/latex-forge-gallery) en une commande, ainsi que les vôtres avec `--engine`
 - **Votre profil, pré-rempli** : renseignez votre nom, email et université une fois ; chaque nouveau projet démarre personnalisé
-- **Prêt pour git** : `latex-forge create --git` initialise un dépôt avec le premier commit
+- **Prêt pour git** : `latex-forge create --repo create` initialise git et crée le dépôt GitHub pour vous
 - **Export prêt à rendre** : `latex-forge export` regroupe vos sources et le PDF dans un ZIP propre
-- **Docteur d'environnement** : `latex-forge setup` installe la chaîne LaTeX selon votre OS ; `latex-forge diagnose` vous dit ce qui ne va pas
+- **Installation en une étape, sans droits admin** : `latex-forge setup` installe LaTeX dans votre dossier personnel et le prouve avec une compilation de test ; `latex-forge diagnose` vous dit ce qui ne va pas
 - **Pensé pour les IA** : chaque projet embarque un `AGENTS.md` qui briefe n'importe quel assistant IA
 - **Multi-plateforme** : macOS, Linux, Windows
 
@@ -277,9 +293,10 @@ latex-forge diagnose
 
 | Problème | Solution |
 |---|---|
-| `latex-forge: command not found` | Ouvrez un nouveau terminal, ou lancez `pipx ensurepath` |
-| Rien ne compile / pas de PDF | `latex-forge setup --install-tex` installe LaTeX pour votre OS |
-| `Package X not found` | `tlmgr install X` (TeX Live) ; MiKTeX l'installe automatiquement |
+| `latex-forge: command not found` | Ouvrez un nouveau terminal (l'installateur a ajouté `~/.local/bin` à votre PATH) |
+| Rien ne compile / pas de PDF | `latex-forge setup --install-tex` installe LaTeX (sans droits admin) |
+| `Package X not found` | `latex-forge build` l'installe et recompile ; avec un TeX Live système il affiche la commande `sudo tlmgr install` |
+| Nouvelle année de TeX Live, les paquets ne s'installent plus | `latex-forge setup --reinstall-tex` met à jour l'installation légère/complète en gardant vos paquets |
 | Compilation bloquée | `latex-forge build --clean`, puis réessayez |
 | Autre chose | [Ouvrez une issue](https://github.com/thmsgo18/latex-forge/issues) avec la sortie de `latex-forge diagnose` |
 
@@ -288,8 +305,8 @@ latex-forge diagnose
 | Commande | Description |
 |---|---|
 | `latex-forge create` | Créer un projet (interactif) |
-| `latex-forge create --name N --template T --output DIR [--git]` | Créer avec des arguments explicites, avec `git init` en option |
-| `latex-forge build [DIR] [--clean] [--verbose]` | Compiler en PDF avec latexmk (installe les paquets manquants via tlmgr) |
+| `latex-forge create --name N --template T --output DIR [--repo MODE]` | Créer avec des arguments explicites (`--repo create/existing/none`) |
+| `latex-forge build [DIR] [--clean] [--verbose]` | Compiler en PDF avec latexmk (installe paquets, polices et styles manquants, puis recompile) |
 | `latex-forge watch [DIR]` | Recompiler à chaque sauvegarde |
 | `latex-forge export [DIR] [--output FICHIER]` | Regrouper sources + PDF dans un ZIP propre à rendre |
 | `latex-forge rename [ANCIEN] NOUVEAU` | Renommer un projet (dossier + fichier principal + artefacts) |
@@ -299,7 +316,8 @@ latex-forge diagnose
 | `latex-forge template update [NOM] [--json]` | Mettre à jour les templates de la galerie |
 | `latex-forge template remove NOM` | Supprimer un template installé |
 | `latex-forge profile set / show / clear` | Gérer votre profil de pré-remplissage |
-| `latex-forge setup [--check-only] [--install-tex]` | Vérifier / configurer l'environnement |
+| `latex-forge setup [--install-tex] [--tex light\|full\|system] [--yes] [--verify]` | Installer LaTeX (sans droits admin par défaut) et vérifier qu'il fonctionne |
+| `latex-forge setup --check-only` / `--reinstall-tex` / `--remove-tex` | Seulement vérifier / réparer / désinstaller le LaTeX géré par latex-forge |
 | `latex-forge diagnose [--json]` | Bilan de santé de l'environnement |
 | `latex-forge completion [--shell SHELL]` | Afficher le code de complétion shell |
 | `latex-forge --version` | Afficher la version |

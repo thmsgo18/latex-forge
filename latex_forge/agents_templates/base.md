@@ -146,9 +146,9 @@ rendered PDF.
 
 | Error | Fix |
 |---|---|
-| LaTeX not installed | `latex-forge setup --install-tex` |
-| `Package X not found` | `tlmgr install X` |
-| Font not found | `tlmgr update --all` or install the missing font package |
+| LaTeX not installed | `latex-forge setup --install-tex` (no admin rights needed), or `scripts/setup.sh` / `scripts\setup.bat` without latex-forge |
+| `File 'x.sty' not found` / `Package X not found` | `latex-forge build` installs missing packages and recompiles (TinyTeX, user-owned TeX Live); otherwise `tlmgr install <package>` |
+| Font not found | `latex-forge build` installs the missing font package too; otherwise `tlmgr update --all` |
 | `! LaTeX Error: Not allowed in LR mode.` (inside a `tikzpicture`) | A TikZ node label contains `\\` — use `align=center, text width=<value>` instead |
 | `Extra \end{...}` / `! Package ... Error: Extra \end...` | An environment was closed without a matching `\begin` — check for a duplicated paragraph or leftover line from a previous edit |
 | References/citations show as `??` or stay undefined | Compile with `latexmk` (not a single engine call) — it runs the extra passes needed to resolve them |

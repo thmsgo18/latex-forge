@@ -5,7 +5,8 @@ LaTeX Forge is a command-line tool that scaffolds structured LaTeX projects from
 ## Core features
 
 - **Create** a project from a built-in or gallery template in one command, pre-filled with your name, email, and institution.
-- **Build** the project to PDF with automatic detection of the right LaTeX engine and auto-installation of missing TeX Live packages.
+- **Build** the project to PDF with automatic detection of the right LaTeX engine and auto-installation of missing TeX Live packages, fonts and bibliography styles.
+- **Set up** LaTeX itself without administrator rights: a lightweight TinyTeX (or all of TeX Live) in your home folder, checked with a test compile.
 - **Watch** mode recompiles on every save.
 - **Install** any template from the [gallery](https://github.com/thmsgo18/latex-forge-gallery), a GitHub URL, or a local directory.
 - **Profile** stores your personal details once and injects them into every new project automatically.
@@ -13,8 +14,8 @@ LaTeX Forge is a command-line tool that scaffolds structured LaTeX projects from
 ## Quick start
 
 ```bash
-# Install
-pipx install latex-forge
+# Install latex-forge and LaTeX (no admin rights, no Python needed)
+curl -LsSf https://raw.githubusercontent.com/thmsgo18/latex-forge/main/install.sh | sh
 
 # Set up your profile (optional but recommended)
 latex-forge profile set

@@ -62,4 +62,5 @@ latex_forge = [
     "getting_started_templates/**/*",
     "scripts_templates/**/*",
     ".vscode/extensions.json",
+    "tex_packages.json",
 ]

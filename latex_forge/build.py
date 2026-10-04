@@ -2,8 +2,10 @@
 
 Also handles a couple of quality-of-life features: locating the project's
 main .tex file by convention, picking the right engine flag from the
-project's VS Code settings, and (on TeX Live) auto-installing missing
-packages reported in the compilation log and retrying once.
+project's VS Code settings, finding the TeX tools even when they aren't on
+PATH, and (on TeX Live / TinyTeX) installing the packages, fonts and helper
+programs a failed compile reports missing, then recompiling — repeatedly,
+since LaTeX stops at the first missing file.
 """
 from __future__ import annotations
 
@@ -13,9 +15,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from . import toolchain
+
 _ENGINE_FLAGS = ("-lualatex", "-xelatex", "-pdf")
 _DEFAULT_FLAG = "-lualatex"
 _MISSING_FILE_PATTERN = re.compile(r"File `([^']+)' not found")
+# Upper bound on compile → install → recompile rounds for one build.
+_MAX_INSTALL_ROUNDS = 10
 
 
 def _detect_latexmk_flag(project_dir: Path) -> str:
@@ -95,53 +101,113 @@ def _find_missing_files(log_path: Path) -> list[str]:
 
 
 def _tlmgr_package_for_file(filename: str) -> str | None:
-    """Find which TeX Live package provides *filename* via `tlmgr search`."""
-    result = subprocess.run(
-        ["tlmgr", "search", "--global", "--file", f"/{filename}"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return None
-    package = None
-    for line in result.stdout.splitlines():
-        if not line.strip():
-            continue
-        indent = len(line) - len(line.lstrip("\t "))
-        if indent == 0:
-            continue  # the searched-for file name itself
-        if indent == 1:
-            package = line.strip().rstrip(":")
-        elif package:
-            return package
-    return None
+    """Find which TeX Live package provides *filename*."""
+    return toolchain.package_for(("file", filename))
 
 
 def _install_missing_packages(missing_files: list[str]) -> list[str]:
     """Try to install the TeX Live packages providing *missing_files*.
 
     Returns the package names that were successfully installed. No-op (returns
-    an empty list) if `tlmgr` is not on PATH, e.g. on MiKTeX where missing
+    an empty list) if `tlmgr` can't be found, e.g. on MiKTeX where missing
     packages are installed automatically by the engine itself.
     """
-    if shutil.which("tlmgr") is None:
+    if toolchain.which("tlmgr") is None:
         return []
-
-    installed = []
+    packages = []
     for filename in missing_files:
         package = _tlmgr_package_for_file(filename)
-        if package is None:
-            continue
-        result = subprocess.run(
-            ["tlmgr", "install", package],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        if package and package not in packages:
+            packages.append(package)
+    return toolchain.install_packages(packages)
+
+
+def _describe(requirement: tuple[str, str]) -> str:
+    kind, name = requirement
+    return {"font": f"font \"{name}\"", "hyphen": f"{name} hyphenation"}.get(kind, name)
+
+
+def _install_and_retry(directory: Path, command: list[str], result, dist: dict):
+    """After a failed compile, install what the log says is missing and recompile.
+
+    Loops because LaTeX stops at the first missing file. Gives up when nothing
+    new can be installed. With a TeX Live that needs admin rights, only prints
+    the command to run.
+    """
+    main_name = command[-1]
+    build_dir = directory / "build"
+    log_path = build_dir / f"{Path(main_name).stem}.log"
+    tried: set[str] = set()
+    # latexmk remembers the failed run and would answer "Nothing to do" even
+    # though a package was just installed: -g forces the recompile.
+    retry_command = [command[0], "-g", *command[1:]]
+
+    from .project import _read_template_tex_packages
+    declared = [p for p in (_read_template_tex_packages(directory, "") or [])]
+
+    for _ in range(_MAX_INSTALL_ROUNDS):
+        log = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
+        needed = toolchain.missing_from_log(log) + toolchain.missing_helpers(build_dir)
+        if not needed:
+            break
+        files = [name for kind, name in needed if kind == "file"]
+        others = [_describe(r) for r in needed if r[0] != "file"]
+        if files:
+            print(f"Missing package files: {', '.join(files)}")
+        if others:
+            print(f"Missing: {', '.join(others)}")
+
+        packages = [p for p in declared if p not in tried]
+        for requirement in needed:
+            package = toolchain.package_for(requirement)
+            if package and package not in tried and package not in packages:
+                packages.append(package)
+
+        if not dist["can_install_packages"]:
+            if packages and dist["kind"] == "texlive":
+                print("Your TeX Live needs admin rights to install packages. Run:")
+                print(f"  sudo tlmgr install {' '.join(packages)}")
+            elif dist["kind"] == "distro":
+                print("Install the missing packages with your system package manager "
+                      "(e.g. `sudo apt install texlive-full`).")
+            break
+        if not packages:
+            if tried and all(toolchain.package_for(r) in tried for r in needed):
+                print("Installed what the log asked for, but the document still fails — see build/*.log.")
+            else:
+                print("Could not auto-install (tlmgr unavailable, offline, or no match).")
+            break
+
+        print("Trying to install them with tlmgr …", flush=True)
+        tried.update(packages)
+        declared = []
+        installed = toolchain.install_packages(packages)
+        if not installed:
+            print("Could not auto-install (tlmgr unavailable, offline, or no match).")
+            break
+        print(f"Installed: {', '.join(installed)}. Recompiling …", flush=True)
+        result = subprocess.run(retry_command, cwd=directory, check=False, env=toolchain.tex_env())
         if result.returncode == 0:
-            installed.append(package)
-    return installed
+            break
+    return result
+
+
+def _preinstall_from_sources(directory: Path) -> None:
+    """Install packages the sources load but the distribution lacks (watch mode).
+
+    `latexmk -pvc` keeps running after a failed compile, so the retry loop of
+    one-shot builds can't apply; installing up front avoids a first build
+    that stalls on a missing package. Cheap: one kpsewhich call.
+    """
+    missing = toolchain.unresolved_files(toolchain.required_files(directory))
+    packages = []
+    for name in missing:
+        package = toolchain.package_for(("file", name))
+        if package and package not in packages:
+            packages.append(package)
+    if packages:
+        print(f"Installing LaTeX packages: {', '.join(packages)}", flush=True)
+        toolchain.install_packages(packages)
 
 
 def run_build(
@@ -159,7 +225,8 @@ def run_build(
     if not directory.is_dir():
         raise FileNotFoundError(f"Project directory not found: {directory}")
 
-    if shutil.which("latexmk") is None:
+    latexmk = toolchain.which("latexmk")
+    if latexmk is None:
         print("latexmk was not found on your PATH.")
         print("Install the LaTeX toolchain with: latex-forge setup --install-tex")
         return 1
@@ -168,31 +235,27 @@ def run_build(
         shutil.rmtree(directory / "build", ignore_errors=True)
 
     command = build_command(directory, watch=watch, verbose=verbose)
+    command[0] = latexmk
     main_name = command[-1]
+    dist = toolchain.detect_distribution()
+    # MiKTeX installs missing packages itself; only TeX Live needs our help.
+    can_fix = dist["kind"] in ("tinytex", "texlive", "distro")
 
     if watch:
+        if can_fix and dist["can_install_packages"]:
+            _preinstall_from_sources(directory)
         print(f"Watching {main_name} — press Ctrl+C to stop.", flush=True)
     else:
         print(f"Compiling {main_name} …", flush=True)
 
     try:
-        result = subprocess.run(command, cwd=directory, check=False)
+        result = subprocess.run(command, cwd=directory, check=False, env=toolchain.tex_env())
     except KeyboardInterrupt:
         print("\nStopped.")
         return 0
 
-    if result.returncode != 0 and not watch:
-        log_path = directory / "build" / f"{Path(main_name).stem}.log"
-        missing_files = _find_missing_files(log_path)
-        if missing_files:
-            print(f"Missing package files: {', '.join(missing_files)}")
-            print("Trying to install them with tlmgr …", flush=True)
-            installed = _install_missing_packages(missing_files)
-            if installed:
-                print(f"Installed: {', '.join(installed)}. Recompiling …", flush=True)
-                result = subprocess.run(command, cwd=directory, check=False)
-            else:
-                print("Could not auto-install (tlmgr unavailable, offline, or no match).")
+    if result.returncode != 0 and not watch and can_fix:
+        result = _install_and_retry(directory, command, result, dist)
 
     if result.returncode == 0 and not watch:
         pdf = directory / "build" / (Path(main_name).stem + ".pdf")

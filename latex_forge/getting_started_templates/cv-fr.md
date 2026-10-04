@@ -60,9 +60,9 @@ Dans `sections/projets.tex`, ajoutez un bloc `\resumeProjectHeading` :
 
 ## Si la compilation échoue
 
-1. **LaTeX non installé** → `latex-forge setup --install-tex`
+1. **LaTeX non installé** → `latex-forge setup --install-tex` (sans droits administrateur ; sans latex-forge : `scripts/setup.sh` ou `scripts\setup.bat`)
 2. **LaTeX Workshop non installé** → installer depuis le panneau Extensions de VS Code
-3. **Police introuvable** → vérifiez que TeX Live est à jour : `tlmgr update --all`
+3. **Police introuvable** → lancez `latex-forge build` : il installe les polices et paquets manquants ; sinon vérifiez que TeX Live est à jour : `tlmgr update --all`
 4. **Compilation bloquée** → supprimer le dossier `build/` et réessayer
 
 Ce CV utilise **LuaLaTeX** (pour fontspec). Vérifiez:

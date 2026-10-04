@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **LaTeX without administrator rights**: `latex-forge setup --install-tex` now installs [TinyTeX](https://yihui.org/tinytex/) in your home folder (~500 MB, a few minutes) instead of a 5 GB system distribution, plus every package the built-in templates use, and compiles a test document to prove it works. `--tex {light,full,system}` picks the distribution: `full` is all of TeX Live (still no admin rights, also upgrades a light install), `system` is the previous MacTeX/MiKTeX/TeX Live install through the package manager. Without flags, `setup` asks. An existing distribution is never touched.
+- **One-line installers** for people who don't use VS Code: `install.sh` (macOS/Linux, `curl … | sh`) and `install.ps1` (Windows) install uv, the CLI on a uv-managed Python, and LaTeX — no Python, pipx or admin rights needed.
+- **Missing packages are installed on demand**: `build` now recognises missing files, OpenType fonts, biblatex styles, babel languages, hyphenation patterns and helper programs (biber, bibtex, makeindex), installs the TeX Live package for each, and recompiles until the document builds. Lookups use the repository's package database (downloaded once, cached a week) instead of one slow `tlmgr search` per file.
+- **`create` installs what the template needs** on a lightweight TinyTeX, so the first compile in VS Code just works: from the template's `tex_packages` list when it has one (built-in templates, and gallery templates once the gallery publishes them), otherwise from its sources and a throwaway test compile. `--skip-packages` turns it off (e.g. offline).
+- `setup --yes`, `--verify` (test compile), `--no-modify-path`, `--reinstall-tex` (after a new TeX Live year, keeping your packages) and `--remove-tex`.
+- `watch` installs the packages the sources load before starting `latexmk -pvc`.
+- `diagnose` reports the distribution in use (TinyTeX, TeX Live, MacTeX, MiKTeX…), where it is, whether missing packages can be installed automatically, and how latex-forge itself was installed (`uv`, `pipx`, …) — the VS Code extension uses it to upgrade the CLI the right way. `--json` adds `tex_distribution` and `cli_install`; existing keys are unchanged.
+- A project's `scripts/setup.py`/`.sh`/`.bat` now install LaTeX the same way (light by default) and the project's own packages, with a standalone copy of the installer (`scripts/toolchain.py`), so a cloned project can be set up without latex-forge. The shell wrappers fall back to `uv run` when no Python 3.8+ is available.
+
+### Changed
+- `latex-forge setup --install-tex` installs the light TinyTeX by default; use `--tex system` for the previous behaviour.
+- TeX tools are now found even when they aren't on PATH: the managed TinyTeX and the usual install locations (MacTeX's `/Library/TeX/texbin`, `/usr/local/texlive/<year>`, `C:\texlive\<year>`, MiKTeX) are searched too, so no more "restart VS Code / open a new terminal" after installing LaTeX.
+- `diagnose` shows "LaTeX" instead of "TeX Live" (it can be MiKTeX) and suggests the right install command for your distribution (`tlmgr install`, `sudo tlmgr install`, `mpm --install`, or `latex-forge setup --install-tex`).
+
+### Fixed
+- `build` retried with plain `latexmk` after installing a package, which latexmk answered with "Nothing to do" because the sources hadn't changed: the retry now forces a rebuild (`-g`), and keeps going while each round installs something new.
+- The system install could never succeed from VS Code: MacTeX's installer (and `sudo apt`) need an administrator password but ran without a terminal. It now refuses up front with the command to run in a terminal (the extension runs it in one).
+- With MiKTeX, latexmk failed with "could not find the script engine 'perl'": the system install now also installs Strawberry Perl, and `diagnose` reports latexmk as broken (with the fix) in that situation.
+- `pacman` installs no longer wait forever for a confirmation nobody can give (`--noconfirm`).
+- On Windows, `tlmgr` (a `.bat`) and `code` (a `.cmd`) are run by full path; running them by bare name failed.
+- `setup` finds VS Code's `code` command in its default install location when it isn't on PATH.
+- `template install --engine` no longer erases the other keys of an existing `latexforge.toml`.
+
 ## [0.7.0] - 2026-07-31
 
 ### Added
