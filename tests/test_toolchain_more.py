@@ -91,6 +91,7 @@ def test_step_and_say_use_the_given_output():
 def test_cache_dir_per_os(monkeypatch, tmp_path):
     monkeypatch.undo()  # the autouse fixture replaced cache_dir
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setattr(toolchain, "detect_os", lambda: "macos")
     assert toolchain.cache_dir() == tmp_path / "Library" / "Caches" / "latex-forge"
     monkeypatch.setattr(toolchain, "detect_os", lambda: "linux")
@@ -470,6 +471,7 @@ def test_extract_self_extracting_exe_failure(tmp_path, monkeypatch):
 @pytest.fixture()
 def linux_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
     monkeypatch.delenv("TINYTEX_DIR", raising=False)
     monkeypatch.setenv("LATEX_FORGE_TEX_DIRS", "")
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
@@ -746,6 +748,7 @@ def test_vscode_cli_on_macos(monkeypatch, tmp_path):
     monkeypatch.setattr(toolchain.shutil, "which", lambda name, path=None: None)
     monkeypatch.setattr(toolchain, "detect_os", lambda: "macos")
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     assert toolchain.vscode_cli() is None or toolchain.vscode_cli().endswith("/bin/code")
     code = tmp_path / "Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
     code.parent.mkdir(parents=True)

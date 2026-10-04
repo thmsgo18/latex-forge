@@ -539,6 +539,14 @@ def main(argv: list[str] | None = None) -> int:
     relevant modules are deferred to each branch to keep CLI startup fast.
     Returns the process exit code.
     """
+    # Windows consoles often use a legacy code page (cp1252) that can't encode
+    # the ✓/✗/→ symbols latex-forge prints: degrade them instead of crashing.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     parser = build_parser()
     argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
