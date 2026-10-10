@@ -296,6 +296,23 @@ def installed_packages() -> set | None:
 
 
 _CROSS_RELEASE = re.compile(r"older than remote repository|Local TeX Live \(\d+\) is older", re.IGNORECASE)
+# Printed (and nothing installed) when the repository ships a newer tlmgr —
+# e.g. a TinyTeX bundle built before the latest texlive.infra update.
+_SELF_UPDATE_NEEDED = re.compile(r"tlmgr itself needs to be updated", re.IGNORECASE)
+
+
+def _update_tlmgr(out=print) -> bool:
+    """Run ``tlmgr update --self``; return True if it succeeded."""
+    _say(out, "    tlmgr needs a newer version of itself first, updating it …")
+    try:
+        result = _run(["tlmgr", "update", "--self"], timeout=600)
+    except (OSError, subprocess.SubprocessError) as exc:
+        _say(out, f"[warn] tlmgr could not update itself: {exc}")
+        return False
+    if result.returncode != 0:
+        _say(out, "[warn] tlmgr could not update itself. Run `tlmgr update --self`, then retry.")
+        return False
+    return True
 
 
 def install_packages(packages, out=print, stream: bool = False) -> list:
@@ -304,14 +321,42 @@ def install_packages(packages, out=print, stream: bool = False) -> list:
     Tries one batched ``tlmgr install`` first (fast), then falls back to one
     package at a time so a single unknown name doesn't block the others.
     With *stream*, tlmgr's own progress lines are shown as they arrive.
+    If tlmgr refuses to install until it updates itself, it is updated once
+    and the install retried.
     """
     wanted = sorted({p for p in packages if p})
     if not wanted or not command_exists("tlmgr"):
         return []
 
     unknown: list = []
+    self_update_tried: list = []
 
     def attempt(names: list) -> bool:
+        result = run_install(names)
+        if result is None:
+            return False
+        text, code = result
+        # tlmgr.bat can exit 0 here on Windows although nothing was installed.
+        if _SELF_UPDATE_NEEDED.search(text):
+            if self_update_tried:
+                return False
+            self_update_tried.append(True)
+            if not _update_tlmgr(out):
+                return False
+            result = run_install(names)
+            if result is None:
+                return False
+            text, code = result
+            if _SELF_UPDATE_NEEDED.search(text):
+                return False
+        if code != 0 and _CROSS_RELEASE.search(text):
+            _say(out, "[warn] Your TeX Live is older than the package repository (a new TeX Live")
+            _say(out, "       year was released). Run `latex-forge setup --reinstall-tex` to upgrade it.")
+        unknown.extend(_NOT_IN_REPOSITORY.findall(text))
+        return code == 0
+
+    def run_install(names: list):
+        """(output, exit code) of one ``tlmgr install``, or None if it couldn't run."""
         try:
             if stream:
                 proc = subprocess.Popen(
@@ -332,12 +377,8 @@ def install_packages(packages, out=print, stream: bool = False) -> list:
                 text, code = result.stdout + result.stderr, result.returncode
         except (OSError, subprocess.SubprocessError) as exc:
             _say(out, f"[warn] tlmgr could not run: {exc}")
-            return False
-        if code != 0 and _CROSS_RELEASE.search(text):
-            _say(out, "[warn] Your TeX Live is older than the package repository (a new TeX Live")
-            _say(out, "       year was released). Run `latex-forge setup --reinstall-tex` to upgrade it.")
-        unknown.extend(_NOT_IN_REPOSITORY.findall(text))
-        return code == 0
+            return None
+        return text, code
 
     def done(names: list) -> list:
         _refresh_user_bin_links()

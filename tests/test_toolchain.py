@@ -406,6 +406,53 @@ def test_install_packages_skips_names_missing_from_repository(monkeypatch):
     assert calls == [["l3backend", "pgf", "siunitx"], ["pgf", "siunitx"]]
 
 
+def test_install_packages_updates_tlmgr_when_it_asks_to(monkeypatch):
+    """A repository with a newer tlmgr makes `tlmgr install` do nothing (exit 0 on Windows)."""
+    calls = []
+    updated = []
+
+    class R:
+        def __init__(self, code, text=""):
+            self.returncode = code
+            self.stdout = text
+            self.stderr = ""
+
+    def fake_run(args, **kw):
+        calls.append(args[1:])
+        if args[1:] == ["update", "--self"]:
+            updated.append(True)
+            return R(0)
+        if not updated:
+            return R(0, "tlmgr itself needs to be updated.\ntlmgr: Terminating; please see warning above!\n")
+        return R(0)
+
+    monkeypatch.setattr(toolchain, "command_exists", lambda name: True)
+    monkeypatch.setattr(toolchain, "_run", fake_run)
+    assert toolchain.install_packages(["pgf", "siunitx"]) == ["pgf", "siunitx"]
+    assert calls == [["install", "pgf", "siunitx"], ["update", "--self"], ["install", "pgf", "siunitx"]]
+
+
+def test_install_packages_gives_up_when_tlmgr_cannot_update(monkeypatch):
+    calls = []
+
+    class R:
+        def __init__(self, code, text=""):
+            self.returncode = code
+            self.stdout = text
+            self.stderr = ""
+
+    def fake_run(args, **kw):
+        calls.append(args[1:])
+        if args[1:] == ["update", "--self"]:
+            return R(1)
+        return R(0, "tlmgr itself needs to be updated.\n")
+
+    monkeypatch.setattr(toolchain, "command_exists", lambda name: True)
+    monkeypatch.setattr(toolchain, "_run", fake_run)
+    assert toolchain.install_packages(["pgf", "siunitx"]) == []
+    assert calls.count(["update", "--self"]) == 1
+
+
 def test_ensure_packages_drops_unknown_names(monkeypatch):
     monkeypatch.setattr(toolchain, "installed_packages", lambda: set())
     monkeypatch.setattr(toolchain, "package_index", lambda out=print: ({}, {"pgf"}))

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-10
+
+### Fixed
+- LaTeX packages stopped installing (during `setup`, `create` and the on-demand installs of `build`) once the package repository shipped a newer `tlmgr` than the installed TinyTeX: `tlmgr install` refused to do anything until `tlmgr update --self` was run, and on Windows it even reported success. latex-forge now updates `tlmgr` when it asks for it and retries the install.
+
 ## [0.8.0] - 2026-10-04
 
 ### Added
