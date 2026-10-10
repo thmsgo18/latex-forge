@@ -39,9 +39,11 @@ LaTeX Forge est un petit outil que vous installez une fois. Une commande crée e
 
 **Aucune connaissance de LaTeX n'est requise pour démarrer.** Et si vous vivez déjà dans un terminal, tout est scriptable.
 
-## L'extension en action
+## LaTeX Forge en action
 
 https://github.com/user-attachments/assets/24b4b492-e271-4a96-a629-db1df27909cb
+
+[![Voir sur YouTube](https://img.shields.io/badge/YouTube-Voir_la_vid%C3%A9o-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=mXMGWlw9qoc)
 
 ## Démarrage rapide
 

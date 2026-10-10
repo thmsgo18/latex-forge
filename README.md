@@ -43,6 +43,8 @@ LaTeX Forge is a small tool you install once. One command then creates a complet
 
 https://github.com/user-attachments/assets/24b4b492-e271-4a96-a629-db1df27909cb
 
+[![Watch on YouTube](https://img.shields.io/badge/YouTube-Watch_the_video-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=mXMGWlw9qoc)
+
 ## Quick start
 
 ```bash
