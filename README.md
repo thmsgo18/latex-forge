@@ -39,6 +39,10 @@ LaTeX Forge is a small tool you install once. One command then creates a complet
 
 **No LaTeX knowledge required to get started.** And if you already live in a terminal, everything is scriptable.
 
+## See it in action
+
+https://github.com/user-attachments/assets/24b4b492-e271-4a96-a629-db1df27909cb
+
 ## Quick start
 
 ```bash
