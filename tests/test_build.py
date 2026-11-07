@@ -10,6 +10,7 @@ from latex_forge.build import (
     _detect_latexmk_flag,
     _find_main_tex,
     _find_missing_files,
+    _forced,
     _install_missing_packages,
     _tlmgr_package_for_file,
     build_command,
@@ -103,6 +104,32 @@ def test_build_command(project):
     assert "-quiet" in cmd
     assert cmd[-1] == "my-report.tex"
     assert "-pvc" not in cmd
+
+
+def test_build_command_never_reads_the_project_rc_file(project, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    (tmp_path / "home").mkdir()
+    # -norc only works as the very first option, whatever the other flags.
+    for cmd in (build_command(project), build_command(project, watch=True), build_command(project, verbose=True)):
+        assert cmd[1] == "-norc"
+        assert "-r" not in cmd
+
+
+def test_build_command_keeps_the_users_own_rc_file(project, tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".latexmkrc").write_text("$pdf_mode = 1;\n")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    cmd = build_command(project)
+    assert cmd[1:4] == ["-norc", "-r", str(home / ".latexmkrc")]
+
+
+def test_forced_rebuild_keeps_norc_first(project):
+    cmd = _forced(build_command(project))
+    assert cmd[1] == "-norc"
+    assert cmd[-2:] == ["-g", "my-report.tex"]
 
 
 def test_build_command_watch_adds_pvc(project):

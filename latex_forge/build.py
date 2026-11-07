@@ -10,6 +10,7 @@ since LaTeX stops at the first missing file.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -70,6 +71,27 @@ def _find_main_tex(project_dir: Path) -> Path:
     )
 
 
+def _user_rc_file() -> Path | None:
+    """The user's own latexmk settings, found where latexmk looks for them (XDG first)."""
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    for candidate in (xdg / "latexmk" / "latexmkrc", Path.home() / ".latexmkrc"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _rc_options() -> list[str]:
+    """Never let latexmk read a project's own ``latexmkrc``.
+
+    An rc file is Perl code that latexmk runs before compiling, and a project can
+    come from anywhere: a shared folder, a download, a generated document. ``-norc``
+    turns off every rc file, but only as the very first option; the user's own rc
+    file, which they wrote themselves, is then read back explicitly with ``-r``.
+    """
+    rc = _user_rc_file()
+    return ["-norc", *(["-r", str(rc)] if rc else [])]
+
+
 def build_command(
     project_dir: Path, watch: bool = False, verbose: bool = False
 ) -> list[str]:
@@ -89,7 +111,13 @@ def build_command(
         command.insert(1, "-quiet")
     if watch:
         command.insert(1, "-pvc")
+    command[1:1] = _rc_options()
     return command
+
+
+def _forced(command: list[str]) -> list[str]:
+    """*command* with ``-g`` (force a rebuild), keeping ``-norc`` the first option."""
+    return [*command[:-1], "-g", command[-1]]
 
 
 def _find_missing_files(log_path: Path) -> list[str]:
@@ -140,7 +168,7 @@ def _install_and_retry(directory: Path, command: list[str], result, dist: dict):
     tried: set[str] = set()
     # latexmk remembers the failed run and would answer "Nothing to do" even
     # though a package was just installed: -g forces the recompile.
-    retry_command = [command[0], "-g", *command[1:]]
+    retry_command = _forced(command)
 
     from .project import _read_template_tex_packages
     declared = [p for p in (_read_template_tex_packages(directory, "") or [])]
