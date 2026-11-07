@@ -107,7 +107,8 @@ def test_build_command(project):
 
 
 def test_build_command_never_reads_the_project_rc_file(project, tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    # Path.home() rather than HOME: Windows reads the home folder from USERPROFILE.
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     (tmp_path / "home").mkdir()
     # -norc only works as the very first option, whatever the other flags.
@@ -120,7 +121,7 @@ def test_build_command_keeps_the_users_own_rc_file(project, tmp_path, monkeypatc
     home = tmp_path / "home"
     home.mkdir()
     (home / ".latexmkrc").write_text("$pdf_mode = 1;\n")
-    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     cmd = build_command(project)
     assert cmd[1:4] == ["-norc", "-r", str(home / ".latexmkrc")]
