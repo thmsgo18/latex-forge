@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-07
+
 ### Security
 - `build` and `watch` no longer let latexmk read a `latexmkrc` or `.latexmkrc` found in the project. Such a file is Perl code that latexmk runs before compiling, and a project can come from a shared folder, a download or a generated document. Your own `~/.latexmkrc` (or `~/.config/latexmk/latexmkrc`) is still read.
 
